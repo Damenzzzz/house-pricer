@@ -1,17 +1,10 @@
-"""Синтетические объявления, чтобы каркас работал до прихода реальных данных.
-
-Цена считается по правдоподобной формуле (район, площадь, этаж, год, тип дома,
-ремонт + шум), поэтому на моке уже можно отлаживать модель цены. Числа НЕ реальные:
-выводы о рынке по ним не делать. Специально добавлен мусор (дубли, «1 тенге»,
-цена строкой) — чтобы проверить, что listings.prepare его чистит.
-"""
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw
 
 from config import DATA_DIR, LISTINGS_RAW, PHOTOS_DIR
 
-DISTRICTS = {   # город: {район: базовая цена ₸/м²}
+DISTRICTS = {
     "алматы": {"медеуский": 1_150_000, "бостандыкский": 1_050_000, "алмалинский": 950_000,
                "ауэзовский": 700_000, "жетысуский": 560_000, "турксибский": 520_000,
                "наурызбайский": 550_000, "алатауский": 480_000},
@@ -57,7 +50,7 @@ def make_listings(n=800, seed=0) -> pd.DataFrame:
         style = ", ".join(r.choice(STYLE[cond], 2, replace=False))
         rows.append({
             "listing_id": f"m{i:05d}", "deal_type": "sale",
-            "price": f"{int(price):,}".replace(",", " ") + " 〒",   # как на сайте — строкой
+            "price": f"{int(price):,}".replace(",", " ") + " 〒",
             "area": area, "rooms": rooms, "city": city.capitalize(),
             "district": f"{district} р-н", "floor": floor, "floors_total": floors_total,
             "year_built": year, "building_type": btype, "condition": cond,
@@ -67,16 +60,14 @@ def make_listings(n=800, seed=0) -> pd.DataFrame:
         })
     df = pd.DataFrame(rows)
     junk = df.sample(3, random_state=seed).copy()
-    junk["listing_id"] = ["junk0", "junk1", "junk2"]   # свои id, иначе уйдут как дубли и чистка не проверится
+    junk["listing_id"] = ["junk0", "junk1", "junk2"]
     junk.loc[junk.index[0], "price"] = "1 〒"
     junk.loc[junk.index[1], "area"] = 0
     junk.loc[junk.index[2], "price"] = "договорная"
-    return pd.concat([df, junk, df.iloc[[0]]], ignore_index=True)  # + дубль id
+    return pd.concat([df, junk, df.iloc[[0]]], ignore_index=True)
 
 
 def make_placeholder_photos(df, seed=0):
-    """Заглушки: цветной фон + подпись. Только чтобы прогнать обвязку —
-    эмбеддинги у них бессмысленные, качество поиска по ним не оценивать."""
     r = np.random.RandomState(seed)
     rooms = ["кухня", "гостиная", "спальня", "санузел", "фасад"]
     for row in df.drop_duplicates("listing_id").itertuples():

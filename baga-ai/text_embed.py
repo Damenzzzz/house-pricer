@@ -1,9 +1,3 @@
-"""Эмбеддинги описаний объявлений (если описание есть в данных).
-
-Фото и текст ищутся разными моделями: SigLIP хорошо сопоставляет «светлая кухня»
-с картинкой, но текст с текстом сравнивает слабо. Для описаний — обычная текстовая
-модель; по умолчанию ALEM text-1024, как в медицинском RAG.
-"""
 import numpy as np
 from openai import OpenAI
 from tqdm import tqdm
@@ -11,7 +5,7 @@ from tqdm import tqdm
 from config import DESC_EMB_PATH, DESC_IDS_PATH, TEXT_EMBED_KEY, TEXT_EMBED_MODEL, TEXT_EMBED_URL
 from listings import load_listings
 
-MIN_DESC_LEN = 20       # короче — не описание, а «продам срочно»
+MIN_DESC_LEN = 20
 MAX_DESC_LEN = 2000
 
 

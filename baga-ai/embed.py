@@ -1,13 +1,3 @@
-"""Эмбеддинги фото и текстовых запросов через SigLIP 2.
-
-Схема из museum_multires: картинка декодируется один раз, тяжёлый прогон
-делается один раз и лежит на диске, дальше поиск, классификация комнат
-и валидация работают по готовой матрице на CPU за секунды.
-
-Отличие от museum: там искали ТУ ЖЕ картину (instance retrieval) -> DINOv3.
-Здесь ищем ПОХОЖИЙ СТИЛЬ ремонта, в том числе по тексту -> нужна модель
-с общим пространством картинка/текст, поэтому SigLIP 2.
-"""
 import hashlib
 import json
 import math
@@ -35,7 +25,6 @@ def l2(x):
 
 
 def open_rgb(src, max_side=None):
-    """EXIF-поворот обязателен: фото с телефона без него лежат на боку."""
     if isinstance(src, Image.Image):
         im = ImageOps.exif_transpose(src).convert("RGB")
     else:
@@ -46,10 +35,7 @@ def open_rgb(src, max_side=None):
     return im
 
 
-# ---------------------------------------------------------------- препроцессинг (из museum-dorewka)
-
 def apply_clahe(im, clip_limit=2.0, tile=(8, 8)):
-    """CLAHE только по яркости (L в LAB) — цвета ремонта не трогаем."""
     lab = cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
     l = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile).apply(l)
@@ -57,15 +43,10 @@ def apply_clahe(im, clip_limit=2.0, tile=(8, 8)):
 
 
 def preprocess(im):
-    """Одинаково для галереи и запросов: домены должны обрабатываться идентично."""
     return apply_clahe(im) if USE_CLAHE else im
 
 
 class PadToSquare:
-    """resize_and_pad из museum-dorewka как transform. Цвет полей = mean модели
-    (там было ImageNet mean (124,116,104), у SigLIP mean 0.5 -> (128,128,128)):
-    после Normalize поля становятся нулями и не добавляют в картинку лишнего."""
-
     def __init__(self, size, fill):
         self.size, self.fill = size, fill
 
@@ -78,8 +59,6 @@ class PadToSquare:
         return canvas
 
 
-# ---------------------------------------------------------------- модель
-
 _model = _proc = _views = None
 _img_size = 224
 
@@ -90,8 +69,6 @@ def load_model():
         _proc = AutoProcessor.from_pretrained(CLIP_MODEL_ID)
         _model = AutoModel.from_pretrained(CLIP_MODEL_ID).eval().to(DEVICE, dtype=DTYPE)
         if os.getenv("USE_TEXT_LORA", "0") == "1":
-            # LoRA на текстовую башню (finetune_text_lora.py): визуальная не тронута,
-            # поэтому эмбеддинги галереи остаются валидными
             from finetune_text_lora import ADAPTER_DIR, attach_adapter
             if (ADAPTER_DIR / "adapter.pt").exists():
                 attach_adapter(_model)
@@ -106,25 +83,19 @@ def make_views(ip, views=VIEWS):
     norm = T.Normalize(ip.image_mean, ip.image_std)
     fill = tuple(round(m * 255) for m in ip.image_mean)
     specs = {
-        # вписать с полями: интерьер 4:3 не сплющивается и не теряет края
         "pad": T.Compose([PadToSquare(s, fill), T.ToTensor(), norm]),
-        # растяжение в квадрат — ровно то, что делает процессор SigLIP
         "full": T.Compose([T.Resize((s, s), interpolation=BICUBIC), T.ToTensor(), norm]),
-        # пропорции целы, края отрезаны — второй вид из museum
         "center": T.Compose([T.Resize(s, interpolation=BICUBIC), T.CenterCrop(s), T.ToTensor(), norm]),
     }
     return {k: specs[k] for k in views}, s
 
 
 def _as_tensor(out):
-    # в разных версиях transformers get_*_features отдаёт тензор или ModelOutput
     return out if torch.is_tensor(out) else out.pooler_output
 
 
 @torch.inference_mode()
 def encode_views(model, xs, forward=None):
-    """{вид: (B,3,s,s)} -> (B, D): нормировать каждый вид, сложить, снова нормировать
-    (правило из museum). forward переопределяется для DINOv3 в dedup.py."""
     forward = forward or (lambda x: _as_tensor(model.get_image_features(pixel_values=x)))
     acc = None
     for x in xs.values():
@@ -133,11 +104,7 @@ def encode_views(model, xs, forward=None):
     return F.normalize(acc, dim=-1).cpu().numpy()
 
 
-# ---------------------------------------------------------------- галерея
-
 class PhotoDS(Dataset):
-    """Один декод файла -> все виды (как MultiViewDS в museum)."""
-
     def __init__(self, paths, views, size):
         self.paths, self.views, self.size = paths, views, size
 
@@ -149,12 +116,10 @@ class PhotoDS(Dataset):
             im = preprocess(open_rgb(self.paths[i]))
             return {k: tf(im) for k, tf in self.views.items()}, i, True
         except Exception:
-            # битое фото не выкидываем, а помечаем: порядок строк должен совпадать с индексом
             return {k: torch.zeros(3, self.size, self.size) for k in self.views}, i, False
 
 
 def embed_paths(paths, model=None, views=None, size=None, forward=None, verbose=True):
-    """-> (E: (N, D) float32 L2-норм., ok: (N,) bool)."""
     if model is None:
         model, _, views = load_model()
         size = _img_size
@@ -181,7 +146,6 @@ def _meta(paths):
 
 
 def embed_all(force=False):
-    """Считает эмбеддинги всех фото шардами. Прервали — перезапуск продолжит с места."""
     idx = load_photo_index()
     paths, files = idx["path"].tolist(), idx["abs_path"].tolist()
     SHARDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -203,7 +167,7 @@ def embed_all(force=False):
         E, ok = embed_paths(files[s * SHARD_SIZE:(s + 1) * SHARD_SIZE])
         tmp = SHARDS_DIR / f"shard_{s:05d}.tmp.npz"
         np.savez(tmp, emb=E.astype(np.float16), valid=ok)
-        os.replace(tmp, f)   # недописанный шард не будет принят за готовый
+        os.replace(tmp, f)
 
     parts = [np.load(SHARDS_DIR / f"shard_{s:05d}.npz") for s in range(n_shards)]
     E = np.concatenate([p["emb"] for p in parts])
@@ -215,8 +179,6 @@ def embed_all(force=False):
 
 
 def load_embeddings():
-    """-> (index, E float32, valid). Падает, если матрица посчитана для другого индекса
-    или другой модели: иначе поиск молча выдавал бы мусор."""
     idx = load_photo_index()
     meta = json.loads(EMB_META.read_text())
     if meta["paths_hash"] != _paths_hash(idx["path"].tolist()):
@@ -230,8 +192,6 @@ def load_embeddings():
 
 
 def emb_matrix() -> np.ndarray:
-    """Матрица эмбеддингов галереи. В git она лежит частями (photo_emb.part0.npy, ...):
-    целиком 107 МБ — больше лимита GitHub на файл. При первом чтении части склеиваются."""
     if not EMB_PATH.exists():
         parts = sorted(EMB_PATH.parent.glob(f"{EMB_PATH.stem}.part*.npy"))
         if not parts:
@@ -241,7 +201,6 @@ def emb_matrix() -> np.ndarray:
 
 
 def split_for_git(n_parts: int = 2):
-    """Режет photo_emb.npy на части меньше 100 МБ для коммита в git."""
     E = np.load(EMB_PATH)
     for old in EMB_PATH.parent.glob(f"{EMB_PATH.stem}.part*.npy"):
         old.unlink()
@@ -250,10 +209,7 @@ def split_for_git(n_parts: int = 2):
     print(f"{EMB_PATH.name}: {E.shape} -> {n_parts} части")
 
 
-# ---------------------------------------------------------------- запросы
-
 def embed_images(images):
-    """Список путей или PIL -> (B, D). Те же виды, что у галереи: домены обрабатываются одинаково."""
     model, _, views = load_model()
     ims = [preprocess(open_rgb(x)) for x in images]
     xs = {k: torch.stack([tf(im) for im in ims]) for k, tf in views.items()}
@@ -262,7 +218,6 @@ def embed_images(images):
 
 @torch.inference_mode()
 def embed_texts(texts):
-    """Список строк -> (B, D). SigLIP обучали на тексте в нижнем регистре с паддингом до 64."""
     model, proc, _ = load_model()
     inp = proc(text=[t.lower() for t in texts], padding="max_length", max_length=64,
                truncation=True, return_tensors="pt").to(DEVICE)

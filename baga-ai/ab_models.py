@@ -1,33 +1,3 @@
-"""A/B: ALEM alemllm против Gemini 3.6 Flash (Vertex AI) на всех задачах проекта.
-
-Гипотеза: Gemini точнее разбирает запрос и реже выдумывает цифры в объяснениях, но
-стоит денег и может быть медленнее. Решение принимается по задачам, а не «в целом»:
-модель, которая лучше разбирает запрос, не обязательно лучше пишет объяснения.
-
-Задачи и метрики (одинаковый промпт, temperature 0, без кэша и без guardrails —
-меряем саму модель):
-
-1. parse — разбор запроса на фильтры. Golden set PARSE_GOLDEN: 36 размеченных запросов,
-   из них 8 ловушек, где правильный ответ — «ничего не ставить» («недорогая квартира»,
-   «в центре», «для семьи с ребёнком»).
-     field_acc     — доля верных полей (10 полей × 36 запросов);
-     exact         — доля запросов, где верны ВСЕ поля;
-     hallucinated  — доля запросов, где модель поставила условие, которого не было.
-                     Самая дорогая ошибка: фильтр молча режет выдачу;
-     json_ok       — ответ разобрался как JSON.
-2. explain — объяснение цены по аналогам, 20 объявлений:
-     придуманные суммы / id (проверка guardrails.check_output), обрезано по max_tokens,
-     покрытие — упомянут диапазон и хотя бы один аналог.
-3. answer — ответ по выдаче, 6 выдач по 6 объявлений, те же метрики.
-4. judge — модель как судья релевантности: 12 запросов × (5 описаний, где признак есть,
-   + 5, где его нет, по регулярке). Согласие с разметкой и каппа Коэна.
-
-Для Gemini отдельно перебирается thinking_level (minimal / low / medium): рассуждения
-улучшают разбор, но добавляют латентность и оплачиваемые токены.
-
-Запуск:  python ab_models.py [--only parse|explain|answer|judge] [--quick]
-Результат: artifacts/ab_models.json, таблицы — в EVALS.md, раздел 6.
-"""
 import argparse
 import json
 import re
@@ -48,8 +18,6 @@ CONFIGS = {
 FIELDS = ["city", "districts", "rooms", "price_min", "price_max", "area_min", "area_max",
           "not_first_floor", "not_last_floor", "photo_rooms"]
 
-# Ожидаемые поля; не указанные — null/False. alt — допустимые варианты там, где запрос
-# честно неоднозначен («студия» — 1 комната или не указано).
 PARSE_GOLDEN = [
     {"q": "двушка в Алматы до 400 тысяч, светлая кухня, не первый этаж",
      "e": {"city": "алматы", "rooms": [2], "price_max": 400000, "not_first_floor": True, "photo_rooms": ["kitchen"]}},
@@ -87,7 +55,6 @@ PARSE_GOLDEN = [
      "e": {"city": "алматы", "districts": ["жетысу"], "rooms": [2, 3], "price_min": 200000, "price_max": 350000}},
     {"q": "светлая квартира", "e": {}},
     {"q": "квартира с балконом до 280к", "e": {"price_max": 280000, "photo_rooms": ["balcony"]}},
-    # ловушки: правильный ответ — ничего не додумывать
     {"q": "нужна квартира для семьи с ребёнком", "e": {}, "trap": True},
     {"q": "недорогая квартира", "e": {}, "trap": True},
     {"q": "квартира в центре", "e": {}, "trap": True},
@@ -137,8 +104,6 @@ def score_parse(item, got: dict | None) -> dict:
             halluc = True
     return {"json_ok": True, "correct": ok, "exact": not wrong, "hallucinated": halluc, "wrong": wrong}
 
-
-# --------------------------------------------------------------- задачи
 
 def run_parse(cfg_names, workers=6):
     from query_parser import llm_parse
@@ -210,7 +175,6 @@ def _gen_rows(tasks, cfg_names, workers=6):
 
 
 def _money_in(text: str, v) -> bool:
-    """Сумма упомянута в любом из форматов: 380 000, 380000, 380 тыс."""
     if v is None:
         return False
     v = int(round(v))
@@ -309,7 +273,6 @@ def run(only=None, quick=False):
 
 
 def gate(report, config="gemini·minimal", min_exact=90.0, max_halluc=0.0) -> bool:
-    """Порог для CI: регрессия разбора запроса (правка промпта, смена модели) роняет сборку."""
     rows = {r["config"]: r for r in report.get("parse", {}).get("table", [])}
     r = rows.get(config)
     if r is None:

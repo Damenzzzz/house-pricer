@@ -1,4 +1,3 @@
-"""Explicit, private Playwright proxy configuration (never logged)."""
 from __future__ import annotations
 
 import json

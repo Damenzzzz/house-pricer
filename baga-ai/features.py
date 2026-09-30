@@ -1,26 +1,13 @@
-"""Признаки для модели цены.
-
-Главное правило: в признаки не должна попасть цена. У 60% объявлений она написана
-прямо в описании («… 750 000 ₸ за месяц …»), и в 57.6% случаев это ровно наш таргет.
-Модель с таким текстом покажет отличную метрику и развалится на новых данных,
-поэтому clean_description() вырезает цену ДО всего остального.
-
-Второй источник признаков — адрес: он заполнен у 100% объявлений и содержит район,
-микрорайон, улицу и иногда название ЖК. Для аренды локация важнее всего.
-"""
 import re
 
 import numpy as np
 import pandas as pd
 
-# Цену пишут как угодно: «750 000 ₸», «200000+ком.услуги», «190000 тысяч», «350000 тнг».
-# Поэтому маскируем ЛЮБОЕ число от 10 000: аренда всегда такая, а площади, этажи,
-# годы постройки и высота потолков — меньше.
 MONEY_MIN = 10_000
 NUM_SEQ_RE = re.compile(r"\d[\d\s\u00a0.,]*\d|\d")
 TAIL_RE = re.compile(r"(Хозяин недвижимости|В Избранное|Сохранить в подборку).*$", re.S)
 
-FLAGS = {   # признак -> что искать в описании
+FLAGS = {
     "furnished":     r"меблирован",
     "no_furniture":  r"без мебели",
     "appliances":    r"(?:стиральн|холодильник|посудомо)",
@@ -35,7 +22,7 @@ FLAGS = {   # признак -> что искать в описании
     "combined_bath": r"санузел\s*совмещ",
 }
 
-NUMS = {    # признак -> regex с одной группой
+NUMS = {
     "kitchen_area_txt": r"кухня\s*(\d+[.,]?\d*)\s*м",
     "living_area_txt":  r"жил\.?\s*площадь\s*(\d+[.,]?\d*)",
     "ceiling":          r"потолки\s*(\d[.,]\d)",
@@ -51,7 +38,6 @@ def _mask_money(m: re.Match) -> str:
 
 
 def clean_description(text) -> str:
-    """Убирает цену (в любом виде) и хвост сайта («Хозяин недвижимости … В Избранное …»)."""
     if not isinstance(text, str):
         return ""
     text = TAIL_RE.sub(" ", text)
@@ -60,7 +46,6 @@ def clean_description(text) -> str:
 
 
 def assert_no_price_leak(texts: pd.Series, prices: pd.Series) -> None:
-    """Страховка: если цена всё же осталась в тексте, лучше упасть, чем обучиться на утечке."""
     left = [str(int(p)) in t.replace(" ", "") for t, p in zip(texts.fillna(""), prices.fillna(0))]
     share = float(np.mean(left))
     if share > 0.01:
@@ -68,9 +53,6 @@ def assert_no_price_leak(texts: pd.Series, prices: pd.Series) -> None:
 
 
 def parse_address(addr) -> dict:
-    """«Медеуский р-н, мкр Самал-2, Аль-Фараби 17 — Достык»
-    -> {mkr: 'мкр самал-2', street: 'аль-фараби', cross_street: 'достык'}
-    Часть после тире — это пересечение улиц, а не название ЖК."""
     out = {"mkr": pd.NA, "street": pd.NA, "cross_street": pd.NA}
     if not isinstance(addr, str):
         return out
@@ -95,7 +77,6 @@ FLAG_COLS = list(FLAGS)
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Таблица признаков в том же порядке строк, что и df."""
     f = pd.DataFrame(index=df.index)
     desc = df.get("description", pd.Series("", index=df.index)).map(clean_description)
     assert_no_price_leak(desc, df.price)

@@ -1,19 +1,3 @@
-"""One-off: re-sync the `city` payload of already-embedded points in Qdrant.
-
-The `city` value was split across casings ("Almaty" vs "almaty") until it was
-canonicalized in the DB (see krisha/parsers/normalize.py::normalize_city). Points
-embedded before that fix carry the stale casing in their payload, which breaks
-the `city` KEYWORD filter ("find similar, filtered by city"). This scrolls every
-existing point and patches only those whose `city` is not already canonical,
-using the same `normalize_city` mapping. Idempotent; safe to re-run.
-
-We scroll the live collection rather than recomputing point ids from the DB
-because photos dedup by sha256 (67.8k photos -> ~66.8k points), so a DB-derived
-id may not exist and would 404 a bulk set_payload.
-
-Usage (Qdrant must be up: `docker compose up -d qdrant`):
-    python -m scripts.reindex_qdrant_city [--dry-run]
-"""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +19,7 @@ def main() -> int:
         return 1
 
     scanned = 0
-    to_fix: dict[str, list] = {}   # canonical city -> [point id]
+    to_fix: dict[str, list] = {}
     seen_values: dict[str, int] = {}
     offset = None
     while True:

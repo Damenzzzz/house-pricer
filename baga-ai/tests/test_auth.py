@@ -6,7 +6,7 @@ import auth
 def test_add_verify_roles():
     auth.add_user("alice", "correct horse", "user")
     assert auth.verify("alice", "correct horse") == "user"
-    assert auth.verify("ALICE", "correct horse") == "user"          # логин без учёта регистра
+    assert auth.verify("ALICE", "correct horse") == "user"
     assert auth.verify("alice", "wrong password") is None
     assert auth.verify("nobody", "whatever1") is None
 
@@ -19,14 +19,14 @@ def test_password_not_stored_in_clear():
 
 def test_validation():
     with pytest.raises(ValueError):
-        auth.add_user("x", "longenough", "user")                   # короткий логин
+        auth.add_user("x", "longenough", "user")
     with pytest.raises(ValueError):
-        auth.add_user("carol", "short", "user")                    # короткий пароль
+        auth.add_user("carol", "short", "user")
     with pytest.raises(ValueError):
-        auth.add_user("dave", "longenough", "guest")               # гость не регистрируется
+        auth.add_user("dave", "longenough", "guest")
     auth.add_user("erin", "longenough", "user")
     with pytest.raises(ValueError):
-        auth.add_user("erin", "longenough", "user")                # дубликат
+        auth.add_user("erin", "longenough", "user")
 
 
 def test_permissions():
@@ -37,7 +37,7 @@ def test_permissions():
 
 def test_rate_limit():
     lim = auth.RateLimiter()
-    assert not lim.allow("g", "guest")                              # гостю LLM не положен
+    assert not lim.allow("g", "guest")
     n = auth.RATE_LIMITS["user"]
     assert all(lim.allow("u", "user") for _ in range(n))
     assert not lim.allow("u", "user")

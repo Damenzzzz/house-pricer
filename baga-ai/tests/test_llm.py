@@ -1,5 +1,3 @@
-"""Шлюз llm.py без сети: провайдеры подменены фейками. Проверяем то, что ломается молча —
-порядок фолбэка, предохранитель, бюджет, кэш и то, что обрезанный ответ не кэшируется."""
 import pytest
 
 import config as C
@@ -47,7 +45,7 @@ def test_transient_error_retried_once_then_fallback(providers):
     p = providers(a=Fake("a", fail=5), b=Fake("b", text="from b"))
     r = llm.complete("s", "u", task="t", use_cache=False)
     assert r.provider == "b" and r.text == "from b"
-    assert p["a"].calls == 2                        # одна повторная попытка на временную ошибку
+    assert p["a"].calls == 2
     assert r.fallback_from == ["a (ошибка)"]
 
 
@@ -70,7 +68,7 @@ def test_breaker_opens_after_repeated_failures(providers):
     assert llm.breaker.is_open("a")
     before = p["a"].calls
     r = llm.complete("s", "u", task="t", use_cache=False)
-    assert p["a"].calls == before                   # мёртвый провайдер больше не ждём
+    assert p["a"].calls == before
     assert "a (предохранитель)" in r.fallback_from
 
 
@@ -94,7 +92,7 @@ def test_no_cache_when_sampling(providers):
     p = providers(a=Fake("a"))
     llm.complete("s", "u", task="t", temperature=0.7)
     llm.complete("s", "u", task="t", temperature=0.7)
-    assert p["a"].calls == 2                        # при сэмплировании ответ не детерминирован
+    assert p["a"].calls == 2
 
 
 def test_truncated_answer_not_cached(providers):

@@ -1,10 +1,3 @@
-"""Parse a detail page (/a/show/{id}).
-
-Primary source is the embedded ``window.data.advert`` JSON (price, rooms,
-square, geo, address, photos). Characteristics not in the JSON (building type,
-year, kitchen area, renovation, bathroom, balcony, furniture) come from the
-``offer__info-item[data-name]`` blocks. Every field is optional.
-"""
 from __future__ import annotations
 
 import json
@@ -25,11 +18,10 @@ PARSER_VERSION = 3
 class DetailResult:
     fields: dict[str, Any] = field(default_factory=dict)
     photos: list[dict[str, Any]] = field(default_factory=list)
-    parsed: bool = False  # True if we recognized the page structure
+    parsed: bool = False
 
 
 def extract_characteristics(html: str) -> list[dict[str, Any]]:
-    """Read both the summary cards and the description's definition lists."""
     return _characteristics(dom.parse(html))
 
 
@@ -75,10 +67,8 @@ def parse_detail(html: str, url: str | None = None) -> DetailResult:
         f["city"] = N.clean(addr.get("city"))
         f["district"] = N.clean(addr.get("district"))
         f["address"] = N.clean(advert.get("addressTitle")) or _join_address(addr)
-        # rent period guard: daily listings live in a different section.
         if advert.get("sectionAlias") and advert.get("sectionAlias") != "arenda":
             f["rent_period"] = "day"
-        # photos
         for i, ph in enumerate(advert.get("photos") or []):
             src = ph.get("src")
             if src:
@@ -88,14 +78,12 @@ def parse_detail(html: str, url: str | None = None) -> DetailResult:
         f["photo_urls"] = [p["url"] for p in res.photos]
         f["photos_count"] = len(res.photos)
 
-    # Title (rooms / floor fallback)
     h1 = tree.css_first(TITLE_H1)
     title = h1.text() if h1 else (advert.get("title") if isinstance(advert, dict) else None)
     if not f.get("rooms"):
         f["rooms"] = N.parse_rooms(title)
     floor, floors_total = N.parse_floor(title)
 
-    # Characteristics from offer__info-item blocks
     reno_parts: list[str] = []
     balcony_parts: list[str] = []
     for characteristic in _characteristics(tree):
@@ -142,15 +130,12 @@ def parse_detail(html: str, url: str | None = None) -> DetailResult:
     if balcony_parts:
         f["balcony"] = "; ".join(balcony_parts)
 
-    # Description
     desc = tree.css_first(DESCRIPTION)
     if desc:
         text = desc.text()
-        # strip a leading "О квартире" heading if present
         text = re.sub(r"^О квартире\s*", "", text).strip()
         f["description"] = N.clean(text)
 
-    # Published date
     m = _CREATED_RE.search(html)
     if m:
         f["published_at"] = m.group(1)

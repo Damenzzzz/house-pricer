@@ -1,12 +1,3 @@
-"""Нужен ли мультимодальный реранкер? precision@5 до и после на golden-запросах.
-
-Кандидаты — топ-12 объявлений канала «по фото» (SigLIP 2, ру-запрос, фильтр по типу комнаты),
-разметка — та же автоматическая, что в evals.py (признак упомянут в описании объявления).
-Реранкер видит только фото — описание ему не показывается, поэтому разметка по описанию
-остаётся независимой.
-
-Запуск: python eval_rerank.py   ->  artifacts/rerank_results.json
-"""
 import json
 import time
 
@@ -25,7 +16,6 @@ def run(k_cand=12, k=5):
     for g in [g for g in GOLDEN if g["pattern"]]:
         q = embed_texts([g["ru"]])[0]
         ids = bench.photo(q, g["room"], k=k_cand)
-        # лучшая фотография каждого кандидата под этот запрос
         cands = []
         for lid in ids:
             m = (bench.listing == lid) & bench.valid

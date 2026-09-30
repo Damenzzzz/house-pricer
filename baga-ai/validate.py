@@ -1,17 +1,3 @@
-"""Проверки качества. Три разных вопроса — три разных теста.
-
-robust  — насколько вектор фото сдвигается от качества, света, кадра и «ИИ-глянца».
-          Идея псевдо-query из museum: портим реальное фото, ответ известен по
-          построению, Hit@K по каждому типу искажения отдельно.
-          ОГРАНИЧЕНИЕ: это мерит чувствительность к виду снимка, а не полный разрыв
-          «сгенерированная комната vs реальная». Тот мерит только ручная разметка (review).
-          Как и в museum: синтетика проще реальности, доверять порядку, а не числам.
-
-review  — HTML со топ-K по вашим запросам (текст и ИИ-картинки) + CSV, где руками
-          ставите 1/0 в колонке relevant. score считает precision@K.
-
-rooms   — точность zero-shot классификатора комнат по ручной разметке.
-"""
 import html
 from pathlib import Path
 
@@ -26,8 +12,6 @@ from rooms import INTERIOR, load_rooms
 from search import get_photo_search
 
 
-# ---------------------------------------------------------------- robust
-
 def _fill(im):
     a = np.array(im)
     edge = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
@@ -35,7 +19,7 @@ def _fill(im):
 
 
 def d_identity(im, r):
-    return im   # контроль: Hit должен быть ~1.0, иначе сломан сам пайплайн
+    return im
 
 
 def d_blur(im, r):
@@ -49,12 +33,10 @@ def d_lowres(im, r):
 
 
 def d_dark(im, r):
-    """вечернее фото на телефон"""
     return ImageEnhance.Brightness(im).enhance(r.uniform(0.45, 0.7))
 
 
 def d_crop(im, r):
-    """другой кадр той же комнаты — грубая замена другому ракурсу"""
     w, h = im.size
     k = r.uniform(0.6, 0.85)
     cw, ch = int(w * k), int(h * k)
@@ -76,7 +58,6 @@ def d_perspective(im, r):
 
 
 def d_polish(im, r):
-    """«ИИ-глянец»: гладко, контрастно, насыщенно, светло — как у сгенерированных картинок"""
     im = im.filter(ImageFilter.SMOOTH_MORE)
     im = ImageEnhance.Contrast(im).enhance(r.uniform(1.15, 1.35))
     im = ImageEnhance.Color(im).enhance(r.uniform(1.2, 1.5))
@@ -118,10 +99,7 @@ def robust(n_val=300, k=5, batch=64):
     return table
 
 
-# ---------------------------------------------------------------- review / score
-
 def _contact_sheet(blocks, out_html, title):
-    """blocks: [(заголовок, [(путь, подпись), ...]), ...] -> HTML-страница с превью."""
     parts = [f"<meta charset='utf-8'><title>{html.escape(title)}</title>",
              "<style>body{font-family:sans-serif;margin:16px}.row{display:flex;gap:8px;flex-wrap:wrap}"
              ".c{width:220px;font-size:12px}.c img{width:220px;height:165px;object-fit:cover}</style>"]
@@ -135,8 +113,6 @@ def _contact_sheet(blocks, out_html, title):
 
 
 def make_review(queries_csv, out_dir="review", k=5):
-    """queries_csv: qid,text,image,rooms. Заполняется text ИЛИ image (путь к ИИ-картинке);
-    rooms необязательно, через ';'. На выходе review.html (смотреть) и review.csv (размечать)."""
     qs = pd.read_csv(queries_csv, dtype=str).fillna("")
     se = get_photo_search()
     out = Path(out_dir)
@@ -181,10 +157,7 @@ def score(review_csv, k=5):
     return per_q
 
 
-# ---------------------------------------------------------------- rooms
-
 def sample_rooms(n=200, out_dir="review"):
-    """Случайные фото с предсказанием -> rooms_todo.csv (заполнить true_room) + HTML для просмотра."""
     rooms = load_rooms()
     s = rooms[rooms.room_type != "invalid"].sample(min(n, len(rooms)), random_state=SEED)
     out = Path(out_dir)

@@ -1,12 +1,3 @@
-"""Phase B smoke test: find similar listings by a single photo, filtered by city.
-
-Encodes one local photo with the same open_clip model used by `embed`, then runs
-two Qdrant searches — unfiltered and filtered to the query photo's city — to prove
-the vector index + the `city` KEYWORD payload filter work end to end.
-
-Usage (Qdrant up, photos embedded):
-    python -m scripts.smoke_similar [--image PATH] [--city CITY] [--topk N]
-"""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +8,6 @@ from krisha.embed_worker import COLLECTION, _load_model, make_client
 
 
 def _pick_query(db: Database, city: str | None):
-    """Return (local_path, listing_id, city) for a downloaded+embedded photo."""
     where = "p.local_path IS NOT NULL AND p.embedded_at IS NOT NULL AND l.city IS NOT NULL"
     params: list = []
     if city:
@@ -37,8 +27,8 @@ def main() -> int:
     ap.add_argument("--topk", type=int, default=5)
     args = ap.parse_args()
 
-    from PIL import Image  # type: ignore
-    from qdrant_client.models import Filter, FieldCondition, MatchValue  # type: ignore
+    from PIL import Image
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
 
     db = Database()
     if args.image:

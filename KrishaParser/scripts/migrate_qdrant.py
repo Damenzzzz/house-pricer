@@ -1,16 +1,3 @@
-"""Migrate the `listing_photos` collection from one Qdrant to another
-(local Docker -> Qdrant Cloud) without re-encoding any photos.
-
-Copies vectors + payloads point-for-point via scroll/upsert, recreating the
-collection and its payload indexes on the destination. Point ids are stable
-(uuid5 of sha256), so this is idempotent — re-running upserts the same ids.
-
-Source defaults to local Docker; destination defaults to the env (QDRANT_URL +
-QDRANT_API_KEY), i.e. the cloud cluster you configured in .env.
-
-Usage:
-    python -m scripts.migrate_qdrant [--source-url URL] [--dest-url URL] [--batch N]
-"""
 from __future__ import annotations
 
 import argparse
@@ -31,11 +18,11 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    from qdrant_client.models import (Distance, VectorParams,  # type: ignore
+    from qdrant_client.models import (Distance, VectorParams,
                                       PayloadSchemaType, PointStruct)
 
     src = make_client(url=args.source_url, api_key=args.source_api_key)
-    dst = make_client(url=args.dest_url)  # api_key from env
+    dst = make_client(url=args.dest_url)
     if args.source_url == (args.dest_url or ""):
         print("source and destination are identical; nothing to do")
         return 1
@@ -53,7 +40,6 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    # (re)create destination collection + payload indexes to match embed_worker
     dst_cols = {c.name for c in dst.get_collections().collections}
     if COLLECTION not in dst_cols:
         dst.create_collection(

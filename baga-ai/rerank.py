@@ -1,13 +1,3 @@
-"""Мультимодальный реранкер: Gemini смотрит на фото кандидатов и переставляет их.
-
-SigLIP сравнивает запрос и фото одним косинусом: «кухня с посудомоечной машиной» для него
-почти то же, что «кухня». Реранкер получает запрос и по одной лучшей фотографии каждого из
-топ-N кандидатов и ставит оценку 0–10 — он видит мелкие детали, которые вектор усредняет.
-
-Стоимость: одно обращение на запрос, 12 картинок по 384 px (≈ 260 токенов каждая) —
-≈ $0.003 и +3–5 с. Поэтому выключен по умолчанию (RERANK=1) и решение о включении —
-по evals (eval_rerank.py, EVALS.md раздел 9). Любая ошибка — исходный порядок.
-"""
 import io
 import json
 import os
@@ -53,8 +43,6 @@ def _image_bytes(path: str | None, url: str | None, side: int = 384) -> bytes | 
 
 
 def rerank(query: str, candidates: list[dict], url_of=None, n: int = RERANK_N) -> tuple[list[dict], dict]:
-    """candidates — [{listing_id, photos: [{path}], ...}] в порядке ретривера.
-    Возвращает (переставленный список, отчёт). Хвост после n не трогается."""
     import llm
     from google.genai import types
     head, tail = candidates[:n], candidates[n:]

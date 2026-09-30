@@ -1,28 +1,3 @@
-"""Агент Baga AI на LangGraph.
-
-Граф:
-
-    parse ──► confirm? ──да──► [ПАУЗА: подтверждение пользователя] ──┐
-      │                                                              │
-      └──нет────────────────────────────────────────────────────────►├──► search
-                                                                      │      │
-                             ┌────────── relax ◄── пусто, попыток<3 ──┘      │
-                             │            (ЦИКЛ)                             │
-                             └────────────────────────────────────────► answer ──► END
-
-Три вещи, которые требует задание, и зачем они здесь на самом деле:
-
-ВЕТВЛЕНИЕ — подтверждение запрашивается не всегда, а только когда LLM додумала условие,
-  которого пользователь не называл. Спрашивать каждый раз — раздражать, не спрашивать
-  никогда — молча резать выдачу.
-ЦИКЛ — если после фильтров ноль кандидатов, агент ослабляет самое жёсткое условие и ищет
-  заново, до трёх попыток. Иначе пользователь получает пустой экран вместо «поднял цену
-  на 30%, вот что есть».
-ПОДТВЕРЖДЕНИЕ ЧЕЛОВЕКА — через interrupt() LangGraph: граф останавливается и ждёт ответа,
-  состояние живёт в чекпоинтере.
-
-Запуск:  python agent.py "двушка в Алматы до 400 тысяч, светлая кухня"
-"""
 from typing import Annotated, Any, Optional, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -49,8 +24,6 @@ class State(TypedDict, total=False):
     log: Annotated[list[str], lambda a, b: (a or []) + (b or [])]
 
 
-# --------------------------------------------------------------- узлы
-
 def parse_node(state: State) -> dict:
     from query_parser import parse
     p = parse(state["query"])
@@ -64,7 +37,6 @@ def parse_node(state: State) -> dict:
 
 
 def confirm_node(state: State) -> dict:
-    """Останавливает граф и ждёт человека. Возобновление — Command(resume=True/False)."""
     answer = interrupt({
         "question": "Я добавил условия, которых вы не называли. Искать с ними?",
         "assumptions": state.get("assumptions", []),
@@ -101,7 +73,6 @@ RELAX_STEPS = [
 
 
 def relax_node(state: State) -> dict:
-    """Ослабляет ровно одно условие за проход — чтобы было видно, что именно изменилось."""
     f = dict(state.get("filters", {}))
     for key, fn, note in RELAX_STEPS:
         if f.get(key) is not None and note not in state.get("relaxed", []):
@@ -128,8 +99,6 @@ def answer_node(state: State) -> dict:
     return {"answer": text, "log": ["сгенерировал ответ по найденному"]}
 
 
-# --------------------------------------------------------------- ветвления
-
 def need_confirmation(state: State) -> str:
     return "confirm" if state.get("assumptions") and not state.get("confirmed") else "search"
 
@@ -154,7 +123,7 @@ def build_graph(checkpointer=None):
     g.add_conditional_edges("parse", need_confirmation, {"confirm": "confirm", "search": "search"})
     g.add_edge("confirm", "search")
     g.add_conditional_edges("search", after_search, {"relax": "relax", "answer": "answer"})
-    g.add_edge("relax", "search")          # цикл
+    g.add_edge("relax", "search")
     g.add_edge("answer", END)
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
@@ -171,11 +140,6 @@ def graph():
 
 def invoke(query: str | None = None, *, resume=None, thread_id: str, user_id: str | None = None,
            channel: str = "web") -> tuple[dict[str, Any], str | None]:
-    """Один шаг графа — запуск (query) или продолжение после паузы (resume) — внутри
-    трейса Langfuse. Возвращает (состояние, trace_id): по trace_id потом пишется 👍/👎.
-
-    Сайт и Telegram-бот вызывают только это: пауза на подтверждение у них выглядит
-    по-разному (кнопки Streamlit / inline-кнопки Telegram), а граф один."""
     import tracing
     inp = Command(resume=resume) if resume is not None else {"query": query}
     cfg = {"configurable": {"thread_id": thread_id}, "callbacks": tracing.langchain_callbacks(),
@@ -193,7 +157,6 @@ def invoke(query: str | None = None, *, resume=None, thread_id: str, user_id: st
 
 
 def run(query: str, thread_id: str = "cli", on_confirm=None) -> dict[str, Any]:
-    """on_confirm(payload) -> bool. Если не передан, домысленные условия принимаются."""
     cfg = {"configurable": {"thread_id": thread_id}}
     state = graph().invoke({"query": query}, cfg)
     while "__interrupt__" in state:

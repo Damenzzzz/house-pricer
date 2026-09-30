@@ -1,26 +1,3 @@
-"""Оценка качества поиска: golden dataset, две метрики, A/B эксперименты.
-
-Метрика 1 — precision@5 по автоматической разметке.
-    Берём признаки, которые ВИДНО на фото и которые авторы упоминают в описании
-    (гардеробная, посудомоечная машина, балкон, панорамные окна…). Ищем ТОЛЬКО по
-    фотографиям, описания в поиске не участвуют. Релевантным считается объявление,
-    в описании которого этот признак упомянут. Разметка независимая: описание писал
-    человек, модель смотрела на картинку.
-    Это нижняя оценка: если балкон есть, но в описании не написан, мы засчитаем промах.
-    Зато сравнение конфигураций честное, и разметка не стоит ни часа ручной работы.
-    База для сравнения — доля таких объявлений в корпусе (сколько дал бы случайный выбор).
-
-Метрика 2 — LLM-as-judge.
-    Для стилевых запросов («уютная кухня в тёплых тонах») формального признака нет.
-    Судья (шлюз llm.py: Gemini 3.6 Flash → ALEM, temperature=0) видит запрос и описание найденного объявления
-    и отвечает, подходит ли. Считаем долю «да» в топ-5.
-
-Эксперименты: каналы (фото / описания / слияние RRF), язык запроса (ру / англ / оба),
-температура генерации объяснений.
-
-Запуск: python evals.py [--quick]
-Работает по локальным матрицам, не занимая Qdrant, — сайт может работать параллельно.
-"""
 import argparse
 import json
 import re
@@ -31,11 +8,8 @@ import pandas as pd
 
 from config import ART_DIR, RENDER_THR, RRF_K
 
-# --------------------------------------------------------------- golden dataset
 
-# pattern — регулярка для автоматической разметки по описанию (если признак виден на фото)
 GOLDEN = [
-    # --- проверяемые автоматически
     {"id": "wardrobe", "ru": "гардеробная комната со стеллажами", "en": "walk-in closet with shelves",
      "room": None, "pattern": r"гардеробн"},
     {"id": "dishwasher", "ru": "кухня с посудомоечной машиной", "en": "kitchen with a dishwasher",
@@ -59,8 +33,6 @@ GOLDEN = [
     {"id": "mountain_view", "ru": "вид на горы из окна", "en": "mountain view from the window",
      "room": ["window_view"], "pattern": r"(вид на горы|видовая)"},
     {"id": "sauna", "ru": "сауна в квартире", "en": "sauna inside the apartment", "room": None, "pattern": r"саун"},
-
-    # --- стилевые: формального признака нет, судит LLM
     {"id": "scandi_kitchen", "ru": "светлая кухня в скандинавском стиле, белые фасады",
      "en": "bright scandinavian kitchen with white cabinets", "room": ["kitchen"], "pattern": None},
     {"id": "soviet", "ru": "старый советский ремонт, ковёр, обои",
@@ -102,12 +74,8 @@ GOLDEN = [
 
 K = 5
 
-# --------------------------------------------------------------- поисковые конфигурации
-
 
 class Bench:
-    """Локальный поиск по матрицам: не занимает Qdrant, чтобы сайт мог работать параллельно."""
-
     def __init__(self):
         from embed import load_embeddings
         from listings import load_listings
@@ -153,10 +121,7 @@ class Bench:
         return sorted(score, key=score.get, reverse=True)[:k]
 
 
-# --------------------------------------------------------------- метрики
-
 def precision_auto(bench: Bench, listing_ids, pattern: str) -> float:
-    """Доля найденных, у которых признак упомянут в описании."""
     hits = [bool(re.search(pattern, bench.desc.get(lid, ""))) for lid in listing_ids]
     return float(np.mean(hits)) if hits else 0.0
 
@@ -172,8 +137,6 @@ JUDGE_SYSTEM = """Ты оцениваешь релевантность квар�
 
 
 def judge_one(args, providers=None) -> int | None:
-    """1 — релевантно, 0 — нет, None — судья не ответил (не считаем за «нет»,
-    иначе падение модели выглядело бы как плохой поиск)."""
     query, description = args
     import llm
     from config import JUDGE_CHAIN
@@ -192,8 +155,6 @@ def judge_precision(bench: Bench, query: str, listing_ids, workers=8) -> float:
         votes = [v for v in ex.map(judge_one, pairs) if v is not None]
     return float(np.mean(votes)) if votes else float("nan")
 
-
-# --------------------------------------------------------------- прогон
 
 def run(quick=False, judge=True):
     from embed import embed_texts

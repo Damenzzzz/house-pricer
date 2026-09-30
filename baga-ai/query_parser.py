@@ -1,17 +1,3 @@
-"""Разбор запроса пользователя на жёсткие условия и стилевую часть.
-
-«Двушка в Алматы до 400 тысяч, светлая кухня в скандинавском стиле, не первый этаж»
-  -> Filters(city="алматы", rooms=[2], price_max=400000, not_first_floor=True)
-  -> style = "светлая кухня в скандинавском стиле"
-
-Почему разделяем: «до 400 тысяч» эмбеддингом невыразимо (вектор не умеет в сравнения),
-а «скандинавский стиль» невыразим фильтром. Числа идут в Qdrant, стиль — в поиск по фото.
-
-Главный риск — модель придумывает условия, которых человек не называл: поставит
-price_max, и половина вариантов молча отвалится. Поэтому в промпте жёстко: не сказано — null,
-а всё, что модель всё же добавила от себя, помечается и выносится на подтверждение
-пользователю (assumptions).
-"""
 import hashlib
 import json
 import re
@@ -57,7 +43,6 @@ class ParsedQuery(BaseModel):
     source: str = Field("", description="кто разобрал: llm:<провайдер>, cache, rules")
 
 
-# Версия промпта входит в ключ кэша: поменяли промпт — старые разборы не используются.
 PROMPT_VERSION = hashlib.sha1(SYSTEM.encode()).hexdigest()[:8]
 _cache = None
 
@@ -71,7 +56,6 @@ def _semantic_cache():
 
 
 def _json_from(text: str) -> dict:
-    """Модель иногда оборачивает JSON в ```json или добавляет фразу до него."""
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         raise ValueError(f"в ответе нет JSON: {text[:200]}")
@@ -83,8 +67,6 @@ def _known_districts() -> list[str]:
 
 
 def _rule_based(query: str) -> ParsedQuery:
-    """Запасной разбор без LLM: ловит числа и ключевые слова. Нужен, чтобы поиск
-    работал, даже когда LLM недоступна."""
     q = query.lower()
     f = Filters()
     if "алматы" in q:
@@ -104,10 +86,8 @@ def _rule_based(query: str) -> ParsedQuery:
 
 def parse(query: str, use_llm: bool = True, use_cache: bool = True) -> ParsedQuery:
     guard = check_input(query)
-    query = guard.text                     # PII замаскированы — в LLM и трейсы они не уходят
+    query = guard.text
     if guard.blocked:
-        # инъекцию в модель не отправляем; регулярки её «не услышат», а стиль всё равно
-        # пойдёт в поиск по фото — пользователь получит выдачу, модель не получит команд
         p = _rule_based(query)
         p.assumptions = []
         p.warnings = guard.warnings + ["запрос содержит инструкции для модели — разобран без LLM"]
@@ -124,7 +104,7 @@ def parse(query: str, use_llm: bool = True, use_cache: bool = True) -> ParsedQue
     try:
         d, r = llm_parse(query)
     except Exception:
-        p = _rule_based(query)             # фолбэк: пользователь всё равно получит выдачу
+        p = _rule_based(query)
         p.warnings = guard.warnings
         return p
     p = _from_llm(query, d)
@@ -135,8 +115,6 @@ def parse(query: str, use_llm: bool = True, use_cache: bool = True) -> ParsedQue
 
 
 def llm_parse(query: str, providers=None, thinking=None):
-    """Сырой разбор моделью: (dict, LLMResult). Отдельно — чтобы A/B сравнивал модели
-    на одном и том же промпте без кэша и guardrails."""
     import llm
     user = f"Известные районы: {', '.join(_known_districts())}\n\nЗапрос: {query}"
     return llm.complete_json(SYSTEM, user, task="parse_query", temperature=0, max_tokens=400,
@@ -148,10 +126,8 @@ def _from_llm(query: str, d: dict) -> ParsedQuery:
 
     style = (d.pop("style", "") or "").strip()
     photo_rooms = d.pop("photo_rooms", None)
-    # null у булевых полей ломает валидацию — пустые значения просто отбрасываем
     f = Filters(**{k: v for k, v in d.items() if k in Filters.model_fields and v is not None})
 
-    # что модель добавила от себя — на подтверждение пользователю
     assumptions, assumed_fields = [], []
     if f.price_max is not None and not re.search(r"\d", query):
         assumptions.append(f"цена до {int(f.price_max):,} ₸".replace(",", " "))

@@ -1,9 +1,3 @@
-"""Unattended bounded-proxy backfill with SQLite, embeddings, Qdrant and CSV checkpoints.
-
-Each route is tried with the controller's normal retry/cooldown budget. Exhausted
-routes are not recycled. CAPTCHA/layout errors stop the worker. A stop-file is
-checked between batches. State and logs survive the interactive agent session.
-"""
 from __future__ import annotations
 
 import argparse
@@ -75,7 +69,6 @@ def main() -> int:
     if not 1 <= args.batch_size <= 100:
         ap.error("--batch-size must be 1..100")
     setup_logging()
-    # OS releases this exclusive lock even if the worker exits unexpectedly.
     lock = (config.DATA_DIR / "auto_backfill.lock").open("a+b")
     if lock.tell() == 0:
         lock.write(b"0")
@@ -111,7 +104,6 @@ def main() -> int:
         if "listing_id" not in (collection.payload_schema or {}):
             client.create_payload_index(embed_worker.COLLECTION, "listing_id",
                                         PayloadSchemaType.INTEGER, wait=True)
-        # Publish progress already made interactively before further scraping.
         finalize_batch(db, client, set(), full=True)
         terminal = "complete"
         while True:
@@ -150,7 +142,6 @@ def main() -> int:
                 break
             if failure:
                 route += 1
-                # No immediate retry after the last attempt of an exhausted route.
                 write_state(db, "route_cooldown", next_proxy_index=route, failure=failure)
                 time.sleep(config.COOLDOWN_S)
             else:

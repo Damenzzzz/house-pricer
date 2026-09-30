@@ -1,8 +1,3 @@
-"""Primary engine: httpx.Client with a real cookie session.
-
-Works for list/search pages and images. Detail pages (/a/show/) are served an
-anti-bot 468 to non-browser clients, so those go through the Playwright engine.
-"""
 from __future__ import annotations
 
 import time
@@ -29,12 +24,11 @@ class HttpEngine(Fetcher):
         self._warmed = False
 
     def _warmup(self) -> None:
-        """Hit the homepage once to obtain krssid/krishauid cookies."""
         if self._warmed:
             return
         try:
             self._client.get(config.BASE_URL)
-        except httpx.HTTPError as e:  # pragma: no cover
+        except httpx.HTTPError as e:
             log.warning("warmup failed: %s", e)
         self._warmed = True
 
@@ -54,7 +48,6 @@ class HttpEngine(Fetcher):
             return FetchResult(url, None, "", self.name, latency)
 
     def head(self, url: str) -> int | None:
-        """Cheap existence check (used to discover a listing's full photo set)."""
         self._warmup()
         try:
             r = self._client.head(url, headers=config.default_headers())
@@ -63,7 +56,6 @@ class HttpEngine(Fetcher):
             return None
 
     def get_bytes(self, url: str, referer: str | None = None) -> tuple[int | None, bytes]:
-        """Download binary content (photos)."""
         self._warmup()
         try:
             r = self._client.get(url, headers=config.default_headers(referer))

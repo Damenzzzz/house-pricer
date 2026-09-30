@@ -1,17 +1,3 @@
-# CI на каждый PR и пуш в main.
-#
-# parser   — парсер krisha.kz: разбор сохранённых HTML-страниц, нормализация, дедуп.
-# offline  — baga-ai без сети и ключей: guardrails (размеченный набор + 64 golden-запроса
-#            на ложные срабатывания), регрессия модели цены по out-of-fold, MCP-сервер через
-#            MCP-клиента, шлюз LLM (фолбэк, предохранитель, бюджет, кэш), смысловой кэш,
-#            авторизация, голос.
-# llm      — живые модели, только если заданы секреты: A/B ALEM vs Gemini на golden-наборе
-#            разбора запроса с ПОРОГОМ (exact ≥ 90%, выдуманных условий 0) — регрессия промпта
-#            или модели роняет сборку; A/B max_tokens на объяснениях.
-# docker   — образ собирается (ловит сломанный Dockerfile и зависимости до деплоя).
-#
-# Поиск по фото (SigLIP + Qdrant) в CI не прогоняется: гигабайты весов и векторов.
-# Его evals — python evals.py локально, результаты в EVALS.md.
 name: ci
 
 on:
@@ -62,8 +48,6 @@ jobs:
   llm:
     runs-on: ubuntu-latest
     needs: offline
-    # секреты лежат в GitHub Environment «GEMINI_API_KEY» (Settings → Environments):
-    # задача видит их, только если окружение указано явно
     environment: GEMINI_API_KEY
     defaults:
       run:

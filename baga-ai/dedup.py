@@ -1,17 +1,10 @@
-"""Группы дублей из пар, найденных DINOv3 + геометрией (ноутбук notebooks/kaggle_dedup.ipynb).
-
-Пары приходят с заниженным порогом: dupe_pairs.csv намеренно содержит и слабые
-совпадения. Собирать группы по всем парам нельзя — объявления с типовым ремонтом
-от застройщика цепляются в одну цепочку (в первом прогоне так слиплись 210 штук).
-Поэтому в граф групп идут только рёбра с надёжной геометрией.
-"""
 from pathlib import Path
 
 import pandas as pd
 
 ART = Path("artifacts")
 PAIRS = ART / "dupe_pairs.csv"
-MIN_INLIERS = 40        # ниже начинается сцепление цепочками, выше и до 200 результат не меняется
+MIN_INLIERS = 40
 
 
 def _components(edges) -> dict:
@@ -57,7 +50,6 @@ def load_dupes() -> pd.DataFrame:
 
 
 def load_trust() -> dict:
-    """listing_id -> в скольких ещё объявлениях встречаются эти фото."""
     p = ART / "listing_trust.parquet"
     if not p.exists():
         return {}

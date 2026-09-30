@@ -1,4 +1,3 @@
-"""`stats`: event summary (last run + all-time), profile, ban history."""
 from __future__ import annotations
 
 from ..controller import RuntimeProfile

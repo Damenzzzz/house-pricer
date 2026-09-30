@@ -1,25 +1,3 @@
-"""Единый шлюз к LLM: Gemini 3.6 Flash (Vertex AI) → ALEM alemllm → шаблон без LLM.
-
-Все генерации проекта (разбор запроса, объяснение цены, ответ по выдаче, судья в evals,
-расшифровка голоса) идут через complete(). В одном месте:
-
-ФОЛБЭК. Провайдеры перебираются по LLM_CHAIN. Упал основной (таймаут, 429, 5xx, пустой
-  ответ) — отвечает следующий. Упали все — LLMUnavailable, и вызывающий код подставляет
-  шаблонный ответ из фактов (explain.template_explanation, query_parser._rule_based):
-  пользователь получает выдачу даже без единой работающей модели.
-ПРЕДОХРАНИТЕЛЬ (circuit breaker). После 3 ошибок подряд провайдер выключается на 60 с:
-  иначе каждый запрос ждал бы таймаут мёртвого сервиса, прежде чем уйти на фолбэк.
-БЮДЖЕТ. Расход считается по токенам и прайсу. Превышен дневной LLM_DAILY_BUDGET_USD —
-  платные провайдеры пропускаются, отвечает бесплатный ALEM («резко подорожало»).
-КЭШ. Ответ при temperature=0 детерминирован, поэтому одинаковый запрос (тот же промпт и
-  параметры) берётся из SQLite: «Почему цена?» по одному объявлению считается один раз.
-  Смысловой кэш для перефразированных запросов — в semantic_cache.py.
-ТРЕЙСИНГ. Каждая попытка — generation в Langfuse: модель, промпт, ответ, токены, цена,
-  с какого провайдера случился фолбэк.
-
-Почему свой шлюз, а не LiteLLM: провайдеров два, и у Gemini есть особенность, которую
-обёртки не решают — thinking-токены съедают max_output_tokens (см. _GeminiProvider).
-"""
 import hashlib
 import json
 import sys
@@ -29,9 +7,6 @@ from dataclasses import asdict, dataclass, field
 
 import config as C
 
-# USD за 1M токенов (вход, выход). Gemini 3.6 Flash: вводная цена Vertex AI до 31.12.2026,
-# с 01.01.2027 — 1.50 / 7.50. Thinking-токены тарифицируются как выходные.
-# ALEM — без оплаты по токенам.
 PRICES = {
     "gemini-3.6-flash": (0.75, 3.75),
     "gemini-3.5-flash": (0.50, 3.00),
@@ -39,20 +14,15 @@ PRICES = {
     "gemini-2.5-flash": (0.30, 2.50),
     "alemllm": (0.0, 0.0),
 }
-# Сколько токенов добавить к лимиту под рассуждения: max_tokens в проекте означает длину
-# ОТВЕТА (как у ALEM), а у Gemini лимит общий на мысли и ответ.
 THINKING_RESERVE = {"minimal": 0, "low": 1024, "medium": 4096, "high": 8192}
 CACHE_TTL_S = 7 * 86400
-# Таймаут по задаче. У Gemini бывают хвостовые задержки: на замере разбор занял 14.7 с,
-# а один вызов через 26 с упал с 499 CANCELLED. Разбор короткий (p50 1.4 с) — ждать
-# дольше 10 с незачем, быстрее уйти на ALEM (2.4 с). Ответы длиннее — 20 с.
 TASK_TIMEOUT_S = {"parse_query": 10, "answer_search": 20, "explain_price": 20, "judge": 15,
                   "stt": 30, "rerank": 30, "visual_judge": 60}
 BREAKER_FAILS, BREAKER_COOLDOWN_S = 3, 60.0
 
 
 class LLMUnavailable(RuntimeError):
-    """Ни один провайдер не ответил — вызывающий код переходит на шаблон."""
+    pass
 
 
 class ProviderError(RuntimeError):
@@ -64,7 +34,7 @@ class ProviderError(RuntimeError):
 @dataclass
 class LLMResult:
     text: str
-    finish_reason: str          # stop | length | safety | other
+    finish_reason: str
     provider: str
     model: str
     prompt_tokens: int = 0
@@ -84,8 +54,6 @@ def cost(model: str, prompt_tokens: int, out_tokens: int) -> float:
     pin, pout = PRICES.get(model, (0.0, 0.0))
     return (prompt_tokens * pin + out_tokens * pout) / 1e6
 
-
-# --------------------------------------------------------------- провайдеры
 
 class _GeminiProvider:
     name = "gemini"
@@ -122,8 +90,7 @@ class _GeminiProvider:
         except errors.APIError as e:
             code = getattr(e, "code", 0) or 0
             raise ProviderError(f"gemini {code}: {str(e)[:200]}", transient=code in (408, 429, 499) or code >= 500)
-        except Exception as e:                       # таймаут, сеть
-            # на таймаут не повторяем тот же провайдер — сразу фолбэк: повтор удвоил бы ожидание
+        except Exception as e:
             timeout = "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower()
             raise ProviderError(f"gemini: {type(e).__name__}: {str(e)[:200]}", transient=not timeout)
         cand = (r.candidates or [None])[0]
@@ -196,8 +163,6 @@ def _finish(raw: str) -> str:
 PROVIDERS = {"gemini": _GeminiProvider(), "alem": _AlemProvider()}
 
 
-# --------------------------------------------------------------- предохранитель
-
 class _Breaker:
     def __init__(self):
         self.fails, self.open_until, self.lock = {}, {}, threading.Lock()
@@ -227,15 +192,12 @@ breaker = _Breaker()
 
 
 def health() -> dict:
-    """Состояние провайдеров — для админ-панели и /health."""
     import store
     return {"chain": C.LLM_CHAIN, "spent_today_usd": round(store.spent_today(), 4),
             "budget_usd": C.LLM_DAILY_BUDGET_USD,
             "providers": {n: {"model": p.model, "configured": p.available(), "breaker_open": breaker.is_open(n)}
                           for n, p in PROVIDERS.items()}}
 
-
-# --------------------------------------------------------------- главный вызов
 
 def _cache_key(system, user, params: dict, chain: list[str]) -> str:
     models = [f"{n}:{PROVIDERS[n].model}" for n in chain if n in PROVIDERS]
@@ -247,8 +209,6 @@ def complete(system: str, user, *, task: str, temperature: float | None = None, 
              max_tokens: int | None = None, json_mode: bool = False, thinking: str | None = None,
              providers: list[str] | None = None, use_cache: bool | None = None,
              user_id: str | None = None, timeout_s: float | None = None) -> LLMResult:
-    """Один ответ модели с фолбэком. providers — принудительный список (для A/B),
-    по умолчанию LLM_CHAIN. user — строка или список частей (текст + аудио) для Gemini."""
     import store
     import tracing
 
@@ -311,7 +271,7 @@ def complete(system: str, user, *, task: str, temperature: float | None = None, 
                            completion_tokens=res.completion_tokens, thinking_tokens=res.thinking_tokens,
                            cost_usd=res.cost_usd, latency_s=res.latency_s, fallback_from=res.fallback_from,
                            user_id=user_id)
-            if key and res.finish_reason == "stop":        # обрезанный ответ не кэшируем
+            if key and res.finish_reason == "stop":
                 store.cache_put(key, {k: v for k, v in res.as_dict().items()
                                       if k not in ("cached", "fallback_from", "trace_id")})
             return res
@@ -328,8 +288,6 @@ def _trace_input(system, user):
 
 
 def complete_json(system: str, user: str, *, task: str, **kw) -> tuple[dict, LLMResult]:
-    """Ответ в JSON. Gemini отдаёт чистый JSON (response_mime_type), ALEM иногда
-    оборачивает в ```json или добавляет фразу — вырезаем объект регуляркой."""
     import re
     res = complete(system, user, task=task, json_mode=True, **kw)
     m = re.search(r"\{.*\}", res.text, re.S)

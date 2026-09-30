@@ -1,9 +1,3 @@
-"""Check a bounded sample from ProxyScrape's official public HTTPS proxy list.
-
-Checks only an HTTPS connectivity endpoint with normal certificate validation.
-Passing connectivity does NOT establish that Krisha will accept the proxy.
-No application credentials or local data are sent through these routes.
-"""
 from __future__ import annotations
 
 import argparse

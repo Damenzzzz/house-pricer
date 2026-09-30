@@ -1,12 +1,3 @@
-"""Оценка цены одного объявления: интервал, вердикт, аналоги.
-
-Это точка входа для агента, MCP-сервера и сайта. Модель обучается отдельно
-(price_model.py / notebooks/price_model.ipynb) и лежит в artifacts/price_model.cbm.
-
-Вердикт формулируется от интервала и в терминах объявлений, а не сделок:
-«цена выше диапазона похожих объявлений». Модель видела цены публикаций, а не
-реальных сделок, и говорить «вы переплачиваете» она права не имеет.
-"""
 import json
 from functools import lru_cache
 
@@ -21,11 +12,10 @@ from listings import load_listings
 MODEL_PATH = ART_DIR / "price_model.cbm"
 OOF_PATH = ART_DIR / "price_oof.parquet"
 META_PATH = ART_DIR / "price_model.json"
-MIN_COMPARABLES = 10        # меньше — предупреждаем, что оценка ненадёжна
+MIN_COMPARABLES = 10
 
 
 class PriceEstimate(BaseModel):
-    """Ответ оценщика. Эта же схема отдаётся наружу MCP-инструментом estimate_price."""
     listing_id: str | None = None
     price: float | None = Field(None, description="цена в объявлении, ₸/мес")
     p10: float = Field(..., description="нижняя граница диапазона похожих")
@@ -57,16 +47,12 @@ def _data() -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def _oof() -> pd.DataFrame:
-    """Честные предсказания для объявлений, которые есть в базе: их делала модель,
-    НЕ видевшая это объявление. Обученная на всех данных модель их запомнила
-    и показала бы неправдоподобно точную оценку."""
     if not OOF_PATH.exists():
         return pd.DataFrame(columns=["listing_id", "p10", "p50", "p90"]).set_index("listing_id")
     return pd.read_parquet(OOF_PATH).set_index("listing_id")
 
 
 def predict_interval(rows: pd.DataFrame) -> np.ndarray:
-    """(n, 3): p10, p50, p90 в тенге. Конформная поправка уже применена."""
     model, meta = _model()
     X = build_features(rows)
     cols, cats = meta["features"], meta["cat_features"]
@@ -79,8 +65,6 @@ def predict_interval(rows: pd.DataFrame) -> np.ndarray:
 
 
 def comparables(row, k=5) -> tuple[pd.DataFrame, str, int]:
-    """Похожие объявления со смягчением условий: для редких квартир точных аналогов нет,
-    и пустой список рядом с вердиктом выглядит как решение без обоснования."""
     df = _data()
     same = df.listing_id != str(row.get("listing_id", ""))
     steps = [
@@ -103,7 +87,6 @@ def comparables(row, k=5) -> tuple[pd.DataFrame, str, int]:
 
 
 def estimate(listing: dict | pd.Series, with_comparables=True, use_oof=True) -> PriceEstimate:
-    """listing — строка из таблицы или словарь с полями area, rooms, city, district, floor…"""
     row = pd.Series(listing) if isinstance(listing, dict) else listing
     lid = str(row.get("listing_id")) if row.get("listing_id") is not None else None
 

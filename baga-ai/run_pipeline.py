@@ -1,27 +1,3 @@
-"""Каркас поиска квартир. Шаги по порядку (каждый можно перезапускать):
-
-  Данные
-    python run_pipeline.py mock [--photos]        # синтетика, пока нет реальных данных
-    python run_pipeline.py prepare                # сырые объявления -> единая схема (listings.py)
-    python run_pipeline.py status                 # что уже посчитано, какие каналы поиска включатся
-
-  Векторизация
-    python run_pipeline.py index                  # photos/<listing_id>/*.jpg -> photos.parquet
-    python run_pipeline.py embed                  # SigLIP 2 по всем фото (шардами, можно прерывать)
-    python run_pipeline.py rooms                  # тип комнаты + «рендер или фото»
-    python run_pipeline.py embed-text             # описания -> ALEM text-1024 (если описания есть)
-
-  Поиск
-    python run_pipeline.py search --text "светлая кухня, скандинавский стиль" --city алматы --rooms 2 --price-max 45000000
-    python run_pipeline.py search --image gen.png --district бостандык
-
-  Проверки
-    python run_pipeline.py validate robust        # чувствительность к качеству/свету/ракурсу/«глянцу»
-    python run_pipeline.py validate sample-rooms  # -> review/rooms_todo.csv для ручной разметки
-    python run_pipeline.py validate rooms review/rooms_todo.csv
-    python run_pipeline.py validate review queries.example.csv
-    python run_pipeline.py validate score review/review.csv
-"""
 import argparse
 import json
 
@@ -147,5 +123,5 @@ def main():
          "score": lambda: V.score(a.file, k=a.k)}[a.what]()
 
 
-if __name__ == "__main__":   # обязательно: DataLoader с num_workers на macOS запускает процессы через spawn
+if __name__ == "__main__":
     main()

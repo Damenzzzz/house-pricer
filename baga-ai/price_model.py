@@ -1,19 +1,3 @@
-"""Модель справедливой цены аренды.
-
-Предсказываем не одно число, а ИНТЕРВАЛ (10-й, 50-й, 90-й перцентили): пользователю
-нужно «похожие сдают за 380–470», а не «модель считает 427 381». Для этого квантильная
-регрессия: функция потерь pinball штрафует недооценку и переоценку по-разному, и модель
-выучивает границу, а не среднее.
-
-Учим на log(price): у цен длинный правый хвост, а ошибка становится относительной
-(10% от 300 и от 600 тысяч — разные деньги, в логарифме одинаковая величина).
-
-Всегда сравниваем с тупым рыночным бейзлайном «медиана ₸/м² по району и комнатам».
-Если CatBoost его не обгоняет — проблема в признаках, а не в модели.
-
-Предсказания out-of-fold: каждая строка предсказана моделью, которая её не видела,
-поэтому вердикт «дороже похожих» можно честно показать на всех объявлениях сразу.
-"""
 import json
 
 import numpy as np
@@ -26,7 +10,6 @@ from splits import add_folds
 QUANTILES = (0.1, 0.5, 0.9)
 DESC_NUM = ["kitchen_area_txt", "living_area_txt", "ceiling", "year_txt", "desc_len"]
 
-# лестница наборов признаков: каждая ступень добавляет блок к предыдущей
 FEATURE_SETS = {
     "catboost база":      [c for c in NUM_COLS if c not in DESC_NUM] + [c for c in CAT_COLS if c != "condition"],
     "+ ремонт":           [c for c in NUM_COLS if c not in DESC_NUM] + CAT_COLS,
@@ -35,8 +18,6 @@ FEATURE_SETS = {
 
 
 def baseline_quantiles(train: pd.DataFrame, test: pd.DataFrame) -> np.ndarray:
-    """Рыночный бейзлайн: перцентили цены за м² у похожих (район + комнаты) × площадь.
-    Если группа мелкая, откатываемся на район, потом на город."""
     t = train.assign(ppm=train.price / train.area)
     keys = [["city", "district", "rooms"], ["city", "district"], ["city"]]
     tables = [t.groupby(k).ppm.quantile(list(QUANTILES)).unstack() for k in keys]
@@ -65,24 +46,15 @@ def fit_predict_catboost(train: pd.DataFrame, test: pd.DataFrame, cols: list[str
 
 def conformal_q_for_fold(train: pd.DataFrame, cols: list[str], X: pd.DataFrame,
                          calib_frac=0.25, seed=0) -> float:
-    """Конформная калибровка интервала (CQR).
-
-    Квантильная регрессия сама по себе даёт слишком узкий коридор: на наших данных
-    покрытие 66% вместо обещанных 80%. CQR это чинит: часть обучающих данных
-    откладывается, на ней смотрим, насколько сильно правда вылезает за границы, и
-    расширяем коридор ровно на столько. В логарифме сдвиг границ — это умножение
-    в тенге, поэтому дорогие квартиры получают пропорционально более широкий интервал.
-    """
     calib = train.sample(frac=calib_frac, random_state=seed)
     fit = train.drop(calib.index)
     pc = np.sort(fit_predict_catboost(fit, calib, cols, X), axis=1)
     yy = np.log(calib.price.to_numpy())
-    scores = np.maximum(np.log(pc[:, 0]) - yy, yy - np.log(pc[:, 2]))   # насколько правда вышла за коридор
-    return float(np.quantile(scores, 0.8))                              # 80% — целевое покрытие
+    scores = np.maximum(np.log(pc[:, 0]) - yy, yy - np.log(pc[:, 2]))
+    return float(np.quantile(scores, 0.8))
 
 
 def metrics(y: np.ndarray, pred: np.ndarray) -> dict:
-    """pred: (n, 3) — p10, p50, p90. Сортируем: три независимых квантиля иногда пересекаются."""
     pred = np.sort(pred, axis=1)
     p10, p50, p90 = pred.T
     return {
@@ -128,9 +100,6 @@ def run(n_splits=5) -> pd.DataFrame:
     seg["цена"] = pd.qcut(seg.price, 4, labels=["дешёвые", "ниже медианы", "выше медианы", "дорогие"])
     print(seg.groupby("цена", observed=True).agg(объявлений=("price", "size"), MAPE=("ape", "mean"),
                                                  покрытие=("hit", "mean")).round(2).to_string())
-    # Сохраняем out-of-fold предсказания: для объявлений, что уже в базе, только они честные —
-    # обученная на всех данных модель их «видела» и занижает ошибку. Модель + поправка нужны
-    # для НОВЫХ объявлений (сайт, MCP).
     from config import ART_DIR
     oof = pd.DataFrame({"listing_id": df.listing_id.to_numpy(),
                         "p10": final[:, 0], "p50": final[:, 1], "p90": final[:, 2]})

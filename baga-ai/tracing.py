@@ -1,19 +1,3 @@
-"""Трейсинг: Langfuse (основной) и Arize Phoenix (локальный, по желанию).
-
-Langfuse — облачный дашборд с трейсами, стоимостью, оценками пользователей и сессиями.
-Выбран основным, потому что:
-  * вызовы Gemini идут не через клиент OpenAI, и автоинструментация их не видит —
-    нужна ручная запись generation с моделью, токенами и ценой, а в Langfuse это штатно;
-  * у LangGraph есть готовый CallbackHandler: узлы графа видны как вложенные спаны;
-  * оценки 👍/👎 из интерфейса и Telegram пишутся как score на тот же трейс — видно,
-    какие ответы людям не понравились, прямо рядом с промптом и ответом модели.
-
-Phoenix остаётся для офлайн-работы без аккаунта (TRACING=1, дашборд на :6006).
-
-Всё, что здесь есть, — наблюдение, а не функциональность: если Langfuse недоступен или
-ключей нет (CI), функции молча ничего не делают, и поиск работает как обычно.
-Вывод только в stderr: stdout MCP-сервера занят протоколом.
-"""
 import contextlib
 import os
 import sys
@@ -21,21 +5,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# ключи Langfuse — в .env; config.py его тоже грузит, но тянет torch, а трейсинг
-# импортируется и там, где config ещё не нужен
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-# типы observation в Langfuse совпадают по смыслу с openinference-видами Phoenix
 _LF_TYPES = {"CHAIN": "chain", "RETRIEVER": "retriever", "TOOL": "tool", "AGENT": "agent",
              "GUARDRAIL": "guardrail", "LLM": "span", "EMBEDDING": "embedding", "EVALUATOR": "evaluator"}
 
 _provider = None
-_broken = False          # Phoenix не поднялся — работаем без него
+_broken = False
 _lf = None
 _lf_broken = False
 
-
-# --------------------------------------------------------------- Langfuse
 
 def langfuse_enabled() -> bool:
     return (not _lf_broken and bool(os.getenv("LANGFUSE_PUBLIC_KEY")) and bool(os.getenv("LANGFUSE_SECRET_KEY"))
@@ -43,8 +22,6 @@ def langfuse_enabled() -> bool:
 
 
 def langfuse():
-    """Клиент Langfuse или None. Ключи и адрес берутся из окружения
-    (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL)."""
     global _lf, _lf_broken
     if not langfuse_enabled():
         return None
@@ -62,8 +39,6 @@ def langfuse():
 @contextlib.contextmanager
 def trace_context(user_id: str | None = None, session_id: str | None = None,
                   tags: list[str] | None = None, name: str | None = None, **metadata):
-    """Привязывает все вложенные спаны к пользователю и сессии — в Langfuse по ним
-    фильтруются трейсы и считается стоимость на пользователя."""
     lf = langfuse()
     if lf is None:
         yield
@@ -84,8 +59,6 @@ class _NoopObs:
 
 @contextlib.contextmanager
 def generation(name: str, model: str, input, model_parameters: dict | None = None, metadata: dict | None = None):
-    """Один вызов LLM как generation: модель, промпт, ответ, токены, цена.
-    Шлюз llm.py вызывает obs.update(output=..., usage_details=..., cost_details=...)."""
     lf = langfuse()
     if lf is None:
         yield _NoopObs()
@@ -120,7 +93,6 @@ def current_trace_id() -> str | None:
 
 
 def score(trace_id: str | None, name: str, value, comment: str | None = None, data_type: str | None = None):
-    """Оценка на трейс: 👍/👎 пользователя, срабатывание guardrail и т. п."""
     lf = langfuse()
     if lf is None or not trace_id:
         return
@@ -132,8 +104,6 @@ def score(trace_id: str | None, name: str, value, comment: str | None = None, da
 
 
 def langchain_callbacks() -> list:
-    """Колбэк для LangGraph: узлы parse → confirm → search → relax → answer становятся
-    вложенными спанами того же трейса."""
     if langfuse() is None:
         return []
     try:
@@ -161,16 +131,11 @@ def trace_url(trace_id: str | None) -> str | None:
         return None
 
 
-# --------------------------------------------------------------- Phoenix (локально)
-
 def enabled() -> bool:
-    """Phoenix включён: TRACING=1 и пакет установлен."""
     return os.getenv("TRACING", "0") == "1" and not _broken
 
 
 def setup(project_name="baga-ai", launch_ui=True):
-    """Поднимает Phoenix и включает автотрассировку клиента OpenAI (вызовы ALEM).
-    Повторные вызовы безопасны."""
     global _provider
     if _provider is not None:
         return _provider
@@ -203,12 +168,6 @@ def _plain(v):
 
 
 class span:
-    """Спан своего шага (поиск, оценка цены, guardrail) в Langfuse и Phoenix сразу.
-
-    Без трейсинга молча ничего не делает — спаны расставлены в коде один раз,
-    без проверок вокруг каждого.
-    """
-
     def __init__(self, name: str, kind: str = "CHAIN", **attrs):
         self.name, self.kind = name, kind
         self.attrs = {k: v for k, v in attrs.items() if v is not None}
@@ -236,7 +195,6 @@ class span:
         return self
 
     def set(self, output=None, **attrs):
-        """output — что вернул шаг (видно в Langfuse), attrs — метаданные."""
         attrs = {k: v for k, v in attrs.items() if v is not None}
         if self._lf is not None:
             try:

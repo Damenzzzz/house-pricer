@@ -1,16 +1,3 @@
-"""Векторное хранилище на Qdrant: фото (SigLIP 2) и описания (ALEM text-1024).
-
-Почему Qdrant, а не матрица в numpy:
-  - фильтры по характеристикам (город, комнаты, цена, площадь) выполняются ВНУТРИ базы
-    вместе с поиском по вектору, а не отдельным проходом по pandas;
-  - группировка по объявлению делается запросом query_points_groups — у квартиры 10-20 фото,
-    и без группировки одна квартира занимала бы весь топ;
-  - состояние переживает перезапуск процесса, и тем же индексом пользуются агент и MCP-сервер.
-
-Два режима, переключаются переменной QDRANT_URL:
-  - сервер (docker compose up -d qdrant, как в репозитории парсера) — QDRANT_URL=http://localhost:6333
-  - встроенный, без сервера: данные в artifacts/qdrant (по умолчанию)
-"""
 import os
 
 import numpy as np
@@ -31,8 +18,6 @@ _client = None
 
 
 def close():
-    """Встроенный Qdrant держит файл открытым; без явного закрытия интерпретатор
-    ругается при выходе."""
     global _client
     if _client is not None:
         _client.close()
@@ -55,12 +40,11 @@ def _recreate(name: str, dim: int, indexed: dict):
     if cl.collection_exists(name):
         cl.delete_collection(name)
     cl.create_collection(name, vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE))
-    for field, schema in indexed.items():   # без индексов фильтрация по payload медленная
+    for field, schema in indexed.items():
         cl.create_payload_index(name, field, schema)
 
 
 def ingest_photos():
-    """Векторы фото + характеристики объявления в payload (чтобы фильтровать внутри базы)."""
     idx, E, valid = load_embeddings()
     rooms = pd.read_parquet(ROOMS_PATH) if ROOMS_PATH.exists() else None
     lst = load_listings().set_index("listing_id")
@@ -84,7 +68,7 @@ def ingest_photos():
             if not valid[i]:
                 continue
             lid = idx.listing_id.iat[i]
-            if lid not in lst.index:            # фото есть, а объявление отсеяно чисткой
+            if lid not in lst.index:
                 continue
             row = lst.loc[lid]
             payload = {
@@ -134,8 +118,6 @@ def ingest_descriptions():
 
 def build_filter(f: Filters | None, rooms: list[str] | None = None,
                  allow_renders=False, districts_exact: list[str] | None = None) -> models.Filter | None:
-    """pydantic-фильтры пользователя -> условия Qdrant. Район приходит уже развёрнутым
-    в точные названия (LLM говорит «бостандык», в данных «бостандыкский р-н»)."""
     must: list = []
     f = f or Filters()
     if f.city:
@@ -157,7 +139,6 @@ def build_filter(f: Filters | None, rooms: list[str] | None = None,
 
 def search_photos(vector, f: Filters | None = None, rooms=None, districts_exact=None,
                   allow_renders=False, k=10, photos_per_listing=3) -> list[dict]:
-    """Поиск с группировкой по объявлению средствами Qdrant: скор объявления = лучшее фото."""
     res = get_client().query_points_groups(
         PHOTOS_COLLECTION, query=list(map(float, vector)), group_by="listing_id",
         limit=k, group_size=photos_per_listing, with_payload=True,
@@ -200,8 +181,6 @@ if __name__ == "__main__":
     p.add_argument("cmd", choices=["ingest", "ingest-photos", "ingest-desc", "ensure", "stats"])
     a = p.parse_args()
     if a.cmd == "ensure":
-        # для docker compose: загрузить только то, чего в базе ещё нет — повторный
-        # запуск контейнера не пересобирает индекс на 73 тысячи точек
         if not has_collection(PHOTOS_COLLECTION):
             ingest_photos()
         if not has_collection(DESC_COLLECTION) and DESC_EMB_PATH.exists():

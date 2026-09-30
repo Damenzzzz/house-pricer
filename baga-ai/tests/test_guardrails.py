@@ -1,4 +1,3 @@
-"""Входной и выходной фильтр. Без сети и без данных — запускается в CI на каждый PR."""
 import eval_guardrails
 from guardrails import check_input, check_output, guard_output
 
@@ -20,7 +19,6 @@ def test_normal_query_passes_untouched():
 
 
 def test_output_check_finds_exactly_one_fake_sum_and_one_fake_id():
-    """Синтетика: одна подставная сумма и один несуществующий id — ровно по одному."""
     text = ("Просят 550 000 ₸, похожие сдают за 380 000 – 470 000 ₸ [1015807119]. "
             "Есть вариант за 123 456 ₸ [999999999].")
     r = check_output(text, allowed_numbers=[550000, 380000, 470000], allowed_ids=["1015807119"])
@@ -36,7 +34,6 @@ def test_rounding_and_ids_are_not_counted_as_invented():
 
 
 def test_truncated_number_is_caught():
-    """Реальный случай из A/B по max_tokens: «550 000» оборвано до «550 00»."""
     r = check_output("а [1012707637] стоит дороже (550 00", [550000], ["1012707637"])
     assert r["invented_numbers"] == [55000.0]
 
@@ -47,14 +44,11 @@ def test_forbidden_phrase_triggers_fallback():
 
 
 def test_other_city_in_answer_is_caught():
-    """Реальный случай с прогона агента: выдача алматинская, а модель пишет «в Астане»."""
     r = check_output("Найдено несколько однокомнатных квартир в Астане [1015831012].", [], ["1015831012"])
     assert not r["ok"] and r["other_cities"] == ["астан"]
 
 
 def test_answer_may_repeat_numbers_from_user_query(monkeypatch):
-    """Регрессия: «до 600 тысяч» из запроса считалось выдуманной суммой, и хороший ответ
-    заменялся шаблоном (найдено на живом прогоне агента)."""
     import explain
     import llm
     res = [{"listing_id": "1015807119", "photos": [], "price_check": {"p10": 500000, "p50": 550000, "p90": 620000},

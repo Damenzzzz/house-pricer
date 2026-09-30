@@ -1,13 +1,3 @@
-"""Download listing photos to data/photos/{listing_id}/{idx}.jpg with sha256
-dedup. If the same image bytes already exist for another listing, we reuse the
-existing file path instead of writing a copy.
-
-Networking here targets the public image CDN (krisha-photos.kcdn.online), a
-static asset host separate from the krisha.kz anti-bot site. Modest parallelism
-is polite and normal for a CDN, so photo I/O uses a small thread pool
-(CDN_CONCURRENCY); the krisha.kz max-concurrency=2 rule applies to the anti-bot
-site, not this CDN. Network fetches run in worker threads; all SQLite writes are
-serialized in the calling thread (single-writer)."""
 from __future__ import annotations
 
 import hashlib
@@ -24,13 +14,10 @@ log = get_logger("photos")
 
 CDN_CONCURRENCY = 8
 
-# All photos of a listing share one CDN stem, indexed 1..N:
-#   https://krisha-photos.kcdn.online/webp/xx/<uuid>/<n>-full.jpg
 _STEM_RE = re.compile(r"^(https://krisha-photos\.kcdn\.online/[a-z]+/[0-9a-f]{2}/[0-9a-f-]{36})/\d+-\w+\.jpg")
 
 
 def _walk_stem(engine: HttpEngine, stem: str, cap: int) -> list[str]:
-    """HEAD-walk a listing's album until the first missing index."""
     urls: list[str] = []
     for i in range(1, cap + 1):
         u = f"{stem}/{i}-full.jpg"
@@ -43,12 +30,6 @@ def _walk_stem(engine: HttpEngine, stem: str, cap: int) -> list[str]:
 def expand_photos(db: Database, engine: HttpEngine | None = None, cap: int = 40,
                   limit: int | None = None,
                   concurrency: int = CDN_CONCURRENCY) -> dict[str, int]:
-    """Discover the FULL photo set of each listing by walking CDN indices.
-
-    The search card only exposes photo #1; the detail page (which enumerates the
-    album) is anti-bot blocked. Because every photo lives under the same public
-    CDN stem as photo #1, we walk `{stem}/{i}-full.jpg` until a 404 and register
-    every photo — no detail page, no evasion. Idempotent + resumable."""
     own = engine is None
     engine = engine or HttpEngine()
     stats = {"listings": 0, "photos_added": 0}
@@ -69,7 +50,7 @@ def expand_photos(db: Database, engine: HttpEngine | None = None, cap: int = 40,
             return lid, _walk_stem(engine, stem, cap)
 
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
-            for lid, urls in ex.map(work, targets):  # DB writes here (main thread)
+            for lid, urls in ex.map(work, targets):
                 if not urls:
                     continue
                 for i, u in enumerate(urls):
@@ -103,7 +84,7 @@ def download_pending(db: Database, engine: HttpEngine | None = None,
             return row, status, content
 
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
-            for row, status, content in ex.map(fetch, pending):  # writes: main thread
+            for row, status, content in ex.map(fetch, pending):
                 lid, idx = row["listing_id"], row["idx"]
                 if not content or (status and status != 200):
                     stats["failed"] += 1

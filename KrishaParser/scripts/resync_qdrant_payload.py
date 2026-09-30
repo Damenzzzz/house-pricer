@@ -1,17 +1,3 @@
-"""Resync mutable payload fields of embedded Qdrant points from the SQLite DB.
-
-Some payload fields are set at embed time but change later:
-  - `city` was split by casing until canonicalized (normalize_city);
-  - `duplicate_group_id` is assigned by `dedup`, which usually runs AFTER embed,
-    so freshly embedded points carry a stale/NULL group.
-
-This scrolls every point, reads its `listing_id` from the payload, looks up the
-current DB values, and patches all mutable listing fields, including price,
-coordinates and dedup groups. Idempotent; re-run after details/embed/dedup.
-
-Usage (targets QDRANT_URL from .env — local Docker or cloud):
-    python -m scripts.resync_qdrant_payload [--dry-run]
-"""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +10,6 @@ from krisha.payload import listing_payload
 
 
 def payload_matches(payload: dict, expected: dict) -> bool:
-    """Ignore JSON floating-point roundoff, but retain meaningful field changes."""
     for key, value in expected.items():
         actual = payload.get(key)
         if actual == value:
@@ -37,7 +22,6 @@ def payload_matches(payload: dict, expected: dict) -> bool:
 
 
 def sync_listings(client, db: Database, listing_ids: set[int]) -> None:
-    """Incremental sync by indexed owner listing_id; shared-photo owners stay intact."""
     from qdrant_client.models import Filter, FieldCondition, MatchValue, SetPayload, SetPayloadOperation
     operations = []
     for lid in sorted(listing_ids):

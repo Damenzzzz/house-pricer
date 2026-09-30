@@ -1,4 +1,3 @@
-"""`photos`: download pending listing photos (httpx) with sha256 dedup."""
 from __future__ import annotations
 
 from ..db import Database

@@ -1,8 +1,3 @@
-"""MCP-сервер через настоящий MCP-клиент (транспорт в памяти): схема инструментов и вызовы.
-
-search_apartments здесь не вызывается: ему нужны SigLIP и индекс Qdrant (гигабайты),
-которых нет в CI. Остальные инструменты работают на закоммиченной модели цены.
-"""
 import anyio
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session as connect

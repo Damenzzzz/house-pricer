@@ -1,8 +1,3 @@
-"""Resume detail enrichment, then dedup, reconcile Qdrant and smoke-test.
-
-Runs finalization even when details stops on a block/CAPTCHA, so partial progress
-is reflected in the vector payload. Returns the details exit code after checks.
-"""
 from __future__ import annotations
 
 import argparse

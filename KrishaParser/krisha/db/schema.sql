@@ -1,11 +1,8 @@
--- Baga AI krisha.kz parser schema. All listing fields are nullable: the
--- parser logs a missing field rather than failing.
-
 CREATE TABLE IF NOT EXISTS listings (
-    id                 INTEGER PRIMARY KEY,        -- krisha advert id
+    id                 INTEGER PRIMARY KEY,
     url                TEXT,
-    deal_type          TEXT,                       -- 'rent'
-    rent_period        TEXT,                       -- 'month' | 'day'
+    deal_type          TEXT,
+    rent_period        TEXT,
     price_kzt          INTEGER,
     rooms              INTEGER,
     area_total         REAL,
@@ -27,10 +24,10 @@ CREATE TABLE IF NOT EXISTS listings (
     balcony            TEXT,
     renovation_text    TEXT,
     published_at       TEXT,
-    photo_urls         TEXT,                       -- json array
+    photo_urls         TEXT,
     photos_count       INTEGER,
-    raw_json           TEXT,                       -- json blob of window.data.advert
-    detail_fetched_at  TEXT,                       -- set once card is enriched
+    raw_json           TEXT,
+    detail_fetched_at  TEXT,
     detail_parser_version INTEGER,
     first_seen_at      TEXT,
     last_seen_at       TEXT,
@@ -57,18 +54,17 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE INDEX IF NOT EXISTS idx_photos_sha ON photos(sha256);
 CREATE INDEX IF NOT EXISTS idx_photos_embed ON photos(embedded_at);
 
--- Every request is logged here; the adaptive controller reads it back.
 CREATE TABLE IF NOT EXISTS scrape_events (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts           TEXT,
     run_id       TEXT,
     url          TEXT,
-    engine       TEXT,       -- http | playwright
+    engine       TEXT,
     status_code  INTEGER,
     latency_ms   INTEGER,
     delay_ms     INTEGER,
     concurrency  INTEGER,
-    outcome      TEXT        -- ok|http_429|http_403|captcha|timeout|empty_parse|parse_error
+    outcome      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_run ON scrape_events(run_id);

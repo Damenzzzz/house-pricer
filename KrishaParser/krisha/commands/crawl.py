@@ -1,8 +1,3 @@
-"""`crawl`: walk search pages for a city and store listing id stubs.
-
-List pages are served fine over httpx. Pagination is driven by
-``window.data.search`` (currentPage / nbTotal). Re-running is cheap: seen ids
-are just refreshed (last_seen_at)."""
 from __future__ import annotations
 
 from .. import config
@@ -54,7 +49,6 @@ def run(db: Database, ctrl: Controller, city: str, max_pages: int | None = None)
             stats["new" if is_new else "seen"] += 1
 
         stats["pages"] += 1
-        # derive last page from nbTotal on the first page
         if total_pages is None:
             total_pages = parsed.page_count
             log.info("city=%s nb_total=%d -> %d pages", city, parsed.nb_total, total_pages)

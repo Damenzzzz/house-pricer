@@ -1,13 +1,3 @@
-# Запуск одной командой:  docker compose up -d   ->  http://localhost:8501
-#
-#   qdrant  — векторная база (фото и описания), данные в томе qdrant_data
-#   init    — один раз загружает векторы в Qdrant (python qdrant_store.py ensure) и выходит;
-#             при повторном запуске ничего не пересобирает
-#   app     — сайт; стартует только после успешного init
-#   bot     — Telegram-бот, по профилю: docker compose --profile telegram up -d
-#
-# Ключи — из .env (см. .env.example). Без ключей LLM сайт работает: поиск, вердикт по цене,
-# шаблонные объяснения.
 x-baga: &baga
   build: .
   image: baga-ai:latest
@@ -54,7 +44,7 @@ services:
     command: ["python", "telegram_bot.py"]
     profiles: ["telegram"]
     healthcheck:
-      disable: true          # проверка из Dockerfile смотрит на порт сайта, у бота его нет
+      disable: true
     depends_on:
       init:
         condition: service_completed_successfully

@@ -1,4 +1,3 @@
-"""Mutable listing metadata shared by embedding and payload reconciliation."""
 from __future__ import annotations
 
 PAYLOAD_FIELDS = (

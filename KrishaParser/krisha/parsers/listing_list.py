@@ -1,9 +1,3 @@
-"""Parse a search/list page: canonical ids + pagination + light card fields.
-
-Pagination uses ``window.data.search`` (currentPage, nbTotal, ids) which is the
-authoritative result set for the page (20 items), avoiding the promoted "hot"
-cards that also render in the HTML.
-"""
 from __future__ import annotations
 
 import math
@@ -56,7 +50,6 @@ def parse_list(html: str) -> ListPage:
         ids = s.get("ids") or []
         page.ids = [int(i) for i in ids if str(i).isdigit()]
 
-    # Card details (best-effort; detail pages remain the source of truth).
     tree = dom.parse(html)
     for card in tree.css(CARD):
         data_id = card.attr("data-id")
@@ -88,7 +81,6 @@ def parse_list(html: str) -> ListPage:
             photos=photos,
         )
 
-    # Fallback: if window.data had no ids, take unique ids from card links.
     if not page.ids:
         seen: list[int] = []
         for m in _SHOW_RE.finditer(html):

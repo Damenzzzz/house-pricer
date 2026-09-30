@@ -1,7 +1,3 @@
-"""Phase B: embed listing photos with open_clip and upsert into Qdrant.
-
-Heavy deps (torch/open_clip/qdrant-client) are imported lazily so the parser
-core runs without them installed."""
 from __future__ import annotations
 
 import os
@@ -14,30 +10,24 @@ from .payload import listing_payload
 
 log = get_logger("embed")
 
-_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-00000000c11b")  # stable ns for clip
+_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-00000000c11b")
 COLLECTION = os.getenv("QDRANT_COLLECTION", "listing_photos")
 
 
 def make_client(url: str | None = None, api_key: str | None = None,
                 timeout: int = 30):
-    """Construct a QdrantClient for either local Docker or Qdrant Cloud.
-
-    Defaults come from the env: QDRANT_URL (falls back to local Docker) and
-    QDRANT_API_KEY (None for local, the cluster key for cloud). Pass explicit
-    url/api_key to target a specific instance (e.g. migrating local -> cloud).
-    """
-    from qdrant_client import QdrantClient  # type: ignore
+    from qdrant_client import QdrantClient
     key = api_key if api_key is not None else os.getenv("QDRANT_API_KEY")
     return QdrantClient(
         url=url or os.getenv("QDRANT_URL", "http://localhost:6333"),
-        api_key=key or None,   # coerce "" -> None so local Docker stays unauthenticated
+        api_key=key or None,
         timeout=timeout,
     )
 
 
 def _load_model():
-    import open_clip  # type: ignore
-    import torch  # type: ignore
+    import open_clip
+    import torch
 
     model_name = os.getenv("CLIP_MODEL", "ViT-B-32")
     pretrained = os.getenv("CLIP_PRETRAINED", "openai")
@@ -50,7 +40,7 @@ def _load_model():
 
 
 def _client(dim: int):
-    from qdrant_client.models import Distance, VectorParams, PayloadSchemaType  # type: ignore
+    from qdrant_client.models import Distance, VectorParams, PayloadSchemaType
 
     client = make_client()
     existing = {c.name for c in client.get_collections().collections}
@@ -70,8 +60,8 @@ def _client(dim: int):
 
 
 def run(db: Database, batch_size: int = 16, limit: int | None = None) -> dict:
-    from PIL import Image  # type: ignore
-    from qdrant_client.models import PointStruct  # type: ignore
+    from PIL import Image
+    from qdrant_client.models import PointStruct
 
     model, preprocess, device, dim, torch = _load_model()
     client = _client(dim)
@@ -108,7 +98,7 @@ def run(db: Database, batch_size: int = 16, limit: int | None = None) -> dict:
             continue
         try:
             img = Image.open(row["local_path"]).convert("RGB")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.warning("cannot open %s: %s", row["local_path"], e)
             stats["skipped"] += 1
             continue

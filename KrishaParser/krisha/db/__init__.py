@@ -1,1 +1,1 @@
-from .database import Database  # noqa: F401
+from .database import Database

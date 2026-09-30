@@ -1,5 +1,3 @@
-"""Small, defensive text/number normalizers. Every function returns None on
-failure rather than raising, so the parser never crashes on odd input."""
 from __future__ import annotations
 
 import re
@@ -14,10 +12,6 @@ def clean(text: str | None) -> str | None:
     return t or None
 
 
-# Canonical (lowercase, ASCII) city keys — match config.CITY_PATHS and the CLI
-# --city argument. The crawl path stores the CLI arg ("almaty"); the detail path
-# stores window.data's addressTitle ("Almaty"/"Алматы"), which split the same
-# city across values and broke city filtering (incl. the Qdrant payload index).
 _CITY_ALIASES: dict[str, str] = {
     "almaty": "almaty",
     "алматы": "almaty",
@@ -27,9 +21,6 @@ _CITY_ALIASES: dict[str, str] = {
 
 
 def normalize_city(value: str | None) -> str | None:
-    """Canonicalize a city name to a single lowercase key so crawl (CLI arg)
-    and detail (JSON) paths never split the same city. Unknown cities are just
-    lowercased/cleaned so nothing is dropped."""
     c = clean(value)
     if not c:
         return None
@@ -65,7 +56,6 @@ def to_float(value) -> float | None:
 
 
 def parse_rooms(title: str | None) -> int | None:
-    """'3-комнатная квартира ...' -> 3."""
     if not title:
         return None
     m = re.search(r"(\d+)\s*-?\s*комнат", title)
@@ -73,7 +63,6 @@ def parse_rooms(title: str | None) -> int | None:
 
 
 def parse_floor(text: str | None) -> tuple[int | None, int | None]:
-    """'1 из 5' or '1/5 этаж' -> (1, 5)."""
     if not text:
         return None, None
     m = re.search(r"(\d+)\s*(?:из|/)\s*(\d+)", text)
@@ -84,7 +73,6 @@ def parse_floor(text: str | None) -> tuple[int | None, int | None]:
 
 
 def parse_areas(text: str | None) -> dict[str, float | None]:
-    """'74 м², Площадь кухни — 9 м²' -> total/kitchen/living where present."""
     out: dict[str, float | None] = {"area_total": None, "area_kitchen": None,
                                      "area_living": None}
     if not text:

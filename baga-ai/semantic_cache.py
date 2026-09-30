@@ -1,20 +1,3 @@
-"""Смысловой кэш: перефразированный запрос не идёт в LLM второй раз.
-
-«двушка в алматы до 400к, светлая кухня» и «2-комнатная Алматы до 400 тысяч, кухня
-светлая» разбираются одинаково, а LLM-разбор стоит ~1–2 с и деньги. Кэш ищет ранее
-разобранный запрос с близким эмбеддингом и отдаёт его разбор.
-
-Главная опасность смыслового кэша — «похоже, но не то»: «до 400 тысяч» и «до 500 тысяч»
-почти совпадают по эмбеддингу, а фильтры у них разные. Поэтому попадание требует ДВУХ
-условий:
-  1. совпадает жёсткая подпись запроса — числа, комнаты, город, районы, этажи, «от/до»,
-     комнаты на фото, покупка/аренда; её считает детерминированный код, не модель;
-  2. косинус эмбеддингов ≥ SEMANTIC_CACHE_THRESHOLD (подобран в eval_semantic_cache.py).
-Подпись — ещё и индекс: сравниваем вектор только с запросами той же подписи.
-
-Эмбеддинги — ALEM text-1024 (та же модель, что для описаний объявлений). Недоступна —
-кэш просто промахивается, разбор идёт в LLM как обычно.
-"""
 import json
 import re
 import time
@@ -45,7 +28,6 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().replace("ё", "е")).strip()
 
 
-# «2-комнатная», «3х комн», «2к» — число комнат уже в словах подписи (r2), а не цена
 _ROOMS_NUM = re.compile(r"(?<![\d.,])\d\s*-?\s*х?\s*(?:комн\w*|к\b)")
 
 
@@ -66,8 +48,6 @@ _district_stems = None
 
 
 def _districts() -> list[str]:
-    """Корни названий районов: «бостандыкский р-н» -> «бостан». Корень, а не слово
-    целиком: люди пишут «в Бостандыке», «бостандыкский», «Бостандык»."""
     global _district_stems
     if _district_stems is None:
         try:
@@ -80,7 +60,6 @@ def _districts() -> list[str]:
 
 
 def signature(text: str) -> str:
-    """Всё, что меняет фильтры. Два запроса с разной подписью никогда не делят кэш."""
     q = _norm(text)
     words = set(re.findall(r"[а-яa-z]+", q))
     sig = {
@@ -107,10 +86,9 @@ class SemanticCache:
             v = np.asarray(self.embed(_norm(text)), dtype=np.float32)
             return v / (np.linalg.norm(v) + 1e-12)
         except Exception:
-            return None                      # эмбеддер недоступен — работаем без кэша
+            return None
 
     def lookup(self, text: str) -> tuple[dict | None, dict]:
-        """(значение или None, отчёт: score, matched, signature)."""
         sig = signature(text)
         info = {"signature": sig, "score": None, "matched": None}
         rows = store.query("SELECT id, text, vec, value, created FROM semantic_cache "

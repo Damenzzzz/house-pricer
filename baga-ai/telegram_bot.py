@@ -1,18 +1,3 @@
-"""Telegram-бот Baga AI: тот же агент, что на сайте, в мессенджере.
-
-Зачем: квартиры ищут с телефона, а ссылки на объявления krisha.kz пересылают друг другу
-в Telegram. Бот закрывает оба сценария там, где человек уже находится:
-  * текст или ГОЛОСОВОЕ «двушка в Алматы до 400 тысяч, светлая кухня» — LangGraph-агент,
-    пауза на подтверждение домысленных условий — inline-кнопки «Да / Нет»;
-  * пересланная ссылка krisha.kz/a/show/<id> — проверка цены с объяснением по аналогам;
-  * 👍/👎 под каждым ответом — отзыв в SQLite и оценка на трейс в Langfuse.
-
-Long polling через httpx (уже стоит как зависимость openai): вебхук потребовал бы
-публичный HTTPS-адрес, а polling работает с ноутбука и из docker compose одинаково.
-
-Запуск:  TELEGRAM_BOT_TOKEN=... python telegram_bot.py
-Токен — у @BotFather. Админы (без лимита): TELEGRAM_ADMIN_IDS=123,456
-"""
 import json
 import os
 import re
@@ -23,7 +8,7 @@ from pathlib import Path
 
 import httpx
 
-import config  # noqa: F401 — загружает .env до чтения переменных ниже
+import config
 
 TOKEN =os.getenv("TELEGRAM_BOT_TOKEN", "")
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -81,7 +66,6 @@ def feedback_kb(kind: str, ref: str):
                                  {"text": "👎", "callback_data": f"fb:{kind}:0:{ref}"}]]}
 
 
-# ref → (запрос, ответ, trace_id) — чтобы отзыв знал, к чему он относится
 _answers: dict[str, tuple[str, str, str | None]] = {}
 
 
@@ -93,8 +77,6 @@ def remember(query: str, answer: str, trace_id: str | None) -> str:
             _answers.pop(k, None)
     return ref
 
-
-# --------------------------------------------------------------- сценарии
 
 def handle_query(chat_id, text: str, voice_reply: bool = False):
     import agent

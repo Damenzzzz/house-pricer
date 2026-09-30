@@ -1,8 +1,3 @@
-"""SQLite access layer: listings/photos upserts, checkpoints, event log.
-
-Upserts are idempotent so re-running never loses data and acts as the resume
-checkpoint (an already-seen listing is not re-fetched).
-"""
 from __future__ import annotations
 
 import json
@@ -18,8 +13,6 @@ from ..parsers.normalize import normalize_city
 log = get_logger("db")
 _SCHEMA = Path(__file__).with_name("schema.sql")
 
-# Columns that a detail-parse may fill (all nullable). Kept explicit so we can
-# build UPSERTs dynamically and so adding a field is a one-line change here.
 LISTING_FIELDS: tuple[str, ...] = (
     "url", "deal_type", "rent_period", "price_kzt", "rooms", "area_total",
     "area_living", "area_kitchen", "floor", "floors_total", "year_built",
@@ -57,18 +50,14 @@ class Database:
     def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    # --- listings ---------------------------------------------------------
     def upsert_stub(self, listing_id: int, url: str, city: str,
                     card: dict[str, Any] | None = None) -> bool:
-        """Insert a listing id discovered on a search page. Returns True if new."""
         now = _now()
         card = card or {}
         city = normalize_city(city)
         cur = self.conn.execute("SELECT id FROM listings WHERE id=?", (listing_id,))
         exists = cur.fetchone() is not None
         if exists:
-            # Backfill card-level fields when still empty (e.g. rows created
-            # before card parsing was enriched).
             self.conn.execute(
                 "UPDATE listings SET last_seen_at=?, url=COALESCE(url,?), "
                 "rooms=COALESCE(rooms,?), area_total=COALESCE(area_total,?), "
@@ -94,11 +83,9 @@ class Database:
         return not exists
 
     def update_detail(self, listing_id: int, fields: dict[str, Any]) -> None:
-        """Fill parsed detail fields on an existing listing row."""
         fields = dict(fields)
         if "city" in fields:
             existing = self.get_listing(listing_id)
-            # `city` is the search bucket; oblast details contain individual towns.
             fields["city"] = (existing["city"] if existing and existing["city"] in config.CITY_PATHS
                               else normalize_city(fields["city"]))
         cols = [c for c in LISTING_FIELDS if c in fields]
@@ -119,8 +106,6 @@ class Database:
         self.conn.commit()
 
     def add_card_photos(self, listing_id: int, urls: list[str]) -> None:
-        """Attach photo urls discovered on a search card (fills photos when the
-        detail page is unavailable). Does not set detail_fetched_at."""
         if not urls:
             return
         self.conn.execute(
@@ -180,7 +165,6 @@ class Database:
             q += " AND photos_count > 0"
         return self.conn.execute(q).fetchone()["c"]
 
-    # --- photos -----------------------------------------------------------
     def upsert_photo(self, listing_id: int, idx: int, **fields: Any) -> None:
         row = self.conn.execute(
             "SELECT 1 FROM photos WHERE listing_id=? AND idx=?", (listing_id, idx)
@@ -225,7 +209,6 @@ class Database:
             q += f" LIMIT {int(limit)}"
         return list(self.conn.execute(q))
 
-    # --- events -----------------------------------------------------------
     def log_event(self, run_id: str, url: str, engine: str, status_code: int | None,
                   latency_ms: int, delay_ms: int, concurrency: int,
                   outcome: str) -> None:

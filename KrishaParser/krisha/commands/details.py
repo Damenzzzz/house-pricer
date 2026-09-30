@@ -1,8 +1,3 @@
-"""`details`: fetch each listing's detail page (Playwright) and parse fields.
-
-Detail pages return an anti-bot 468 over plain HTTP, so this always uses the
-Playwright engine. Idempotent: only listings with detail_fetched_at IS NULL are
-fetched, so a re-run resumes where it stopped."""
 from __future__ import annotations
 
 from .. import config
@@ -60,7 +55,6 @@ def run(db: Database, ctrl: Controller, city: str | None = None,
 
 
 def save_detail(db: Database, lid: int, detail) -> None:
-    """Merge gallery by URL so detail order cannot overwrite downloaded photo IDs."""
     existing = db.photos_for(lid)
     by_url = {p["url"]: p["idx"] for p in existing}
     next_idx = max((p["idx"] for p in existing), default=-1) + 1

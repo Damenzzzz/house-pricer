@@ -1,14 +1,3 @@
-"""Listing deduplication.
-
-Exact duplicates are already prevented by the ``id`` primary key. This module
-groups *near*-duplicates (the same physical flat re-posted) so one apartment
-never lands in both the train and test split.
-
-A near-duplicate group is formed by union-find over two signals:
-  1. same structural key: (rooms, round(area_total), floor, address|complex);
-  2. any shared photo sha256.
-Each connected component gets a stable ``duplicate_group_id`` = "g{min_id}".
-"""
 from __future__ import annotations
 
 from .db import Database
@@ -50,7 +39,6 @@ def run_dedup(db: Database) -> int:
         return 0
     uf = _UF(ids)
 
-    # 1) structural key
     by_key: dict[tuple, int] = {}
     for r in listings:
         key = _struct_key(r)
@@ -61,7 +49,6 @@ def run_dedup(db: Database) -> int:
         else:
             by_key[key] = r["id"]
 
-    # 2) shared photo sha256
     by_sha: dict[str, int] = {}
     for r in listings:
         for ph in db.photos_for(r["id"]):

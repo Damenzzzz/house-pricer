@@ -1,10 +1,3 @@
-"""Рабочее состояние сервиса в одном SQLite: учёт вызовов LLM, кэш ответов, отзывы.
-
-Почему SQLite, а не Redis/Postgres: один процесс Streamlit + бот + MCP на одной машине,
-нагрузка — единицы запросов в секунду. SQLite в режиме WAL держит несколько процессов-
-читателей и одного писателя без отдельного сервера, а файл переживает перезапуск.
-При переезде на несколько реплик меняется только этот модуль.
-"""
 import json
 import sqlite3
 import threading
@@ -13,7 +6,7 @@ from datetime import datetime, timezone
 
 from config import DB_PATH
 
-_lock = threading.RLock()        # conn() вызывается и под замком из execute/query
+_lock = threading.RLock()
 _conn = None
 
 SCHEMA = """
@@ -62,8 +55,6 @@ def today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-# --------------------------------------------------------------- учёт LLM
-
 def log_call(task: str, provider: str, model: str, ok: bool, cached: bool = False, prompt_tokens=0,
              completion_tokens=0, thinking_tokens=0, cost_usd=0.0, latency_s=0.0, fallback_from=(),
              error: str | None = None, user_id: str | None = None):
@@ -86,8 +77,6 @@ def usage_summary(days: int = 7) -> list[dict]:
                  (time.time() - days * 86400,))
 
 
-# --------------------------------------------------------------- точный кэш
-
 def cache_get(key: str, ttl_s: float):
     rows = query("SELECT value, created FROM llm_cache WHERE key = ?", (key,))
     if not rows or time.time() - rows[0]["created"] > ttl_s:
@@ -100,8 +89,6 @@ def cache_put(key: str, value: dict):
     execute("INSERT OR REPLACE INTO llm_cache(key, value, created, hits) VALUES (?,?,?,0)",
             (key, json.dumps(value, ensure_ascii=False), time.time()))
 
-
-# --------------------------------------------------------------- отзывы
 
 def add_feedback(user_id, channel, kind, value, comment=None, query_text=None, answer=None, trace_id=None):
     execute("INSERT INTO feedback VALUES (?,?,?,?,?,?,?,?,?)",

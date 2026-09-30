@@ -1,8 +1,3 @@
-"""Disk cache of raw responses keyed by sha1(url).
-
-Lets a re-run skip already-downloaded pages (checkpoint/resume at the HTTP
-layer, complementing the DB-level dedup).
-"""
 from __future__ import annotations
 
 import hashlib

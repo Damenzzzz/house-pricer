@@ -1,30 +1,3 @@
-"""LoRA-адаптация текстовой башни SigLIP 2 под язык объявлений krisha.kz.
-
-Гипотеза. SigLIP 2 учили на англоязычных подписях из интернета. Наши запросы — русский
-язык аренды: «евроремонт», «хрущёвка», «кухня-гостиная», «с/у раздельный». Если подстроить
-текстовую башню на парах «описание объявления -> фотографии этого объявления», русский
-запрос будет точнее попадать в нужные фото.
-
-Почему именно так:
-  * LoRA только на ТЕКСТОВУЮ башню, визуальная заморожена -> 73 тысячи уже посчитанных
-    эмбеддингов фото остаются валидными, пересчитывать галерею не нужно. Адаптер ~2 МБ.
-  * Цель для описания — средний эмбеддинг фото объявления (без рендеров и битых фото).
-  * Лосс — сигмоидный, как при обучении самой SigLIP, с её же logit_scale и logit_bias.
-  * Запросы короткие, описания длинные: на каждом шаге берётся случайный кусок описания
-    из 1–2 предложений — модель учится на коротких фразах.
-  * Разбиение групповое (splits.py): дубли объявления не попадают в train и test сразу,
-    иначе recall завышался бы запоминанием.
-
-Оценка на отложенном фолде (модель эти объявления не видела):
-  1. описание -> фото своего объявления: recall@1, recall@10 среди объявлений теста;
-  2. golden-запросы из evals.py с автоматической разметкой: precision@5 по фото среди
-     объявлений теста — ровно то, что видит пользователь.
-  3. визуальный судья (Gemini смотрит на фото) на всех 32 golden-запросах среди объявлений теста.
-Адаптер включается (USE_TEXT_LORA=1), только если прирост на визуальном судье больше шума
-(+5 п.п. при 160 вердиктах) и автоматическая разметка не хуже.
-
-Запуск: python finetune_text_lora.py [--epochs 3] [--eval-only]
-"""
 import argparse
 import json
 import random
@@ -47,7 +20,6 @@ def lora_config(r=16):
 
 
 def attach_adapter(model, path=ADAPTER_DIR):
-    """Вставляет сохранённый LoRA в text_model уже загруженной SigLIP (для embed.py)."""
     from peft import inject_adapter_in_model, set_peft_model_state_dict
     meta = json.loads((path / "meta.json").read_text())
     inject_adapter_in_model(lora_config(meta["r"]), model.text_model)
@@ -55,8 +27,6 @@ def attach_adapter(model, path=ADAPTER_DIR):
     set_peft_model_state_dict(model.text_model, state)
     return model
 
-
-# --------------------------------------------------------------- данные
 
 def load_data():
     from embed import load_embeddings
@@ -67,7 +37,7 @@ def load_data():
     r = load_rooms()
     ok = valid & (r.render_prob.to_numpy() < RENDER_THR)
     lids = idx.listing_id.to_numpy()
-    df = add_folds(load_listings())                 # add_folds сбрасывает индекс — ставим id после
+    df = add_folds(load_listings())
     df = df.set_index(df.listing_id.astype(str), drop=False)
     return idx, E, ok, lids, r.room_type.to_numpy(), df
 
@@ -97,8 +67,6 @@ def sample_text(desc: str, rng: random.Random) -> str:
     i = rng.randrange(len(s))
     return " ".join(s[i:i + rng.choice((1, 2))])
 
-
-# --------------------------------------------------------------- модель
 
 def encode(model, proc, texts, grad=False):
     inp = proc(text=[t.lower() for t in texts], padding="max_length", max_length=64,
@@ -149,8 +117,6 @@ def train(model, proc, pairs, targets, epochs=3, batch=96, lr=2e-4, seed=SEED):
     return model
 
 
-# --------------------------------------------------------------- оценка
-
 @torch.no_grad()
 def eval_desc_to_photo(model, proc, pairs, targets):
     ids = [l for l, _ in pairs]
@@ -191,8 +157,6 @@ def eval_golden(model, proc, E, ok, lids, room, test_ids, df, k=5):
 
 @torch.no_grad()
 def eval_visual(models: dict, proc, E, ok, lids, room, idx, test_ids, k=5):
-    """Визуальный судья (eval_visual_judge.judge) на всех 32 golden-запросах, поиск только
-    среди объявлений теста: 160 вердиктов на модель вместо 60 у автоматической разметки."""
     from concurrent.futures import ThreadPoolExecutor
 
     from eval_visual_judge import judge
@@ -255,8 +219,6 @@ def run(epochs=3, eval_only=False, test_fold=0):
     report["base"]["visual"], report["lora"]["visual"] = vis["base"], vis["lora"]
     print("визуальный судья:", json.dumps(vis, ensure_ascii=False))
     b, l = report["base"], report["lora"]
-    # Включаем, только если прирост на визуальном судье больше шума: 160 бинарных вердиктов
-    # дают стандартную ошибку разницы ≈ 5 п.п., поэтому порог — +5 п.п.
     gain = l["visual"]["visual_precision@5"] - b["visual"]["visual_precision@5"]
     better = gain >= 5 and l["golden"]["precision@5"] >= b["golden"]["precision@5"]
     report["decision"] = (f"включить (USE_TEXT_LORA=1): визуальный судья +{gain:.1f} п.п." if better

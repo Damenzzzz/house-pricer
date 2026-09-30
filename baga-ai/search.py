@@ -1,17 +1,3 @@
-"""Поиск объявлений: жёсткие условия + ранжирование по смыслу.
-
-    фильтры (город, комнаты, цена, площадь)  ──┐
-    текст/картинка -> SigLIP 2 -> фото         ├─→ RRF (k=60) → топ-10
-    текст -> ALEM text-1024 -> описания        ┘
-
-Два бэкенда поиска по фото:
-  - Qdrant (основной): фильтры выполняются внутри базы вместе с векторным поиском,
-    группировка по объявлению — запросом query_points_groups;
-  - numpy (запасной): если коллекция не залита, работает по матрице из artifacts.
-
-Каналы включаются сами по наличию артефактов: нет фото — ищем по описаниям, нет
-описаний — по фото, нет ничего — просто фильтруем.
-"""
 import numpy as np
 import pandas as pd
 
@@ -23,7 +9,6 @@ CARD_FIELDS = ["price", "area", "rooms", "price_per_m2", "city", "district", "fl
 
 
 def resolve_districts(df: pd.DataFrame, substrings) -> list[str]:
-    """LLM говорит «бостандык», в данных «бостандыкский р-н» — разворачиваем в точные значения."""
     if not substrings:
         return []
     known = df.district.dropna().astype(str).unique()
@@ -31,8 +16,6 @@ def resolve_districts(df: pd.DataFrame, substrings) -> list[str]:
 
 
 class NumpyPhotoSearch:
-    """Запасной бэкенд: матрица эмбеддингов в памяти."""
-
     def __init__(self):
         from embed import load_embeddings
         self.idx, self.E, self.valid = load_embeddings()
@@ -59,7 +42,7 @@ class NumpyPhotoSearch:
         if cand.size == 0:
             return []
         s = self.E @ q
-        n = min(cand.size, k * 50)      # с запасом: у квартиры до 20 фото
+        n = min(cand.size, k * 50)
         best = cand[np.argpartition(-s[cand], n - 1)[:n]]
         out = {}
         for r in best[np.argsort(-s[best])]:
@@ -75,8 +58,6 @@ class NumpyPhotoSearch:
 
 
 class QdrantPhotoSearch:
-    """Основной бэкенд: фильтры и группировка выполняются в Qdrant."""
-
     def __init__(self):
         import qdrant_store as Q
         self.Q = Q
@@ -122,13 +103,6 @@ class ListingSearch:
 
     def search(self, text=None, filters: Filters | None = None, image=None, images=None,
                rooms=None, k=10, weights=None, candidates=200):
-        """text — стиль («светлая кухня, скандинавский»), filters — жёсткие условия,
-        image/images — одна или несколько картинок-запросов.
-
-        Несколько фото НЕ усредняются в один вектор: среднее кухни и детской не похоже
-        ни на кухню, ни на детскую. Вместо этого каждое фото — отдельный запрос со своим
-        типом комнаты, а объявления ранжируются по слиянию этих запросов; отдельно
-        считается покрытие — сколько из присланных фото объявление закрыло."""
         weights = {"photo": 1.0, "desc": RRF_DESC_WEIGHT, **(weights or {})}
         f = filters or Filters()
         districts_exact = resolve_districts(self.df, f.districts)
@@ -160,7 +134,7 @@ class ListingSearch:
                         prev = photo_hits.get(h["listing_id"])
                         if prev is None:
                             photo_hits[h["listing_id"]] = h
-                        else:   # копим фото от всех запросов, без повторов
+                        else:
                             seen = {p["path"] for p in prev["photos"]}
                             prev["photos"] += [p for p in h["photos"] if p["path"] not in seen]
             else:
@@ -184,12 +158,10 @@ class ListingSearch:
                 w = weights.get(ch, weights.get("photo", 1.0) if ch.startswith("photo") else 1.0)
                 for rank, lid in enumerate(lst, 1):
                     score[lid] = score.get(lid, 0.0) + w / (RRF_K + rank)
-            # сначала те, кто закрыл больше присланных фото: объявление с кухней И детской
-            # важнее того, у кого идеально совпала только кухня
             n_queries = len(queries)
             order = sorted(score, key=lambda lid: (len(coverage.get(lid, [])) if n_queries > 1 else 0,
                                                    score[lid]), reverse=True)
-        else:   # ни стиля, ни каналов — сверху дешевле за м²
+        else:
             order, score = cand.sort_values("price_per_m2").index.tolist(), {}
 
         pos = {ch: {lid: i + 1 for i, lid in enumerate(lst)} for ch, lst in rankings.items()}
@@ -207,8 +179,6 @@ class ListingSearch:
         return out
 
     def _query_vector(self, text, image, rooms):
-        """Вектор запроса: из текста или из картинки. Для картинки заодно определяем комнату —
-        иначе сгенерированная гостиная найдёт кухню в тех же тонах."""
         from embed import embed_images, embed_texts
         if image is not None:
             q = embed_images([image])[0]
@@ -225,7 +195,6 @@ _search = None
 
 
 def get_search() -> ListingSearch:
-    """Один экземпляр на процесс: индексы и модель грузятся один раз."""
     global _search
     if _search is None:
         _search = ListingSearch()

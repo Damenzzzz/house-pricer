@@ -1,15 +1,10 @@
-"""CLI навыка rent-price-check: тонкая обёртка над api.py.
-
-Работает и с id, и со ссылкой krisha.kz. Всё, что печатается, — JSON,
-чтобы вызывающая модель могла разобрать ответ без парсинга текста.
-"""
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))   # корень проекта baga-ai
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 
 def listing_id(value: str) -> str:

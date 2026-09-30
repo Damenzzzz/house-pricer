@@ -1,4 +1,3 @@
-"""Extract the embedded ``window.data`` JSON object from a page."""
 from __future__ import annotations
 
 import json

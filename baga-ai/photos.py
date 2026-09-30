@@ -1,11 +1,3 @@
-"""Индекс фотографий: какая картинка к какому объявлению относится.
-
-Порядок строк в photos.parquet = порядок строк в матрице эмбеддингов.
-После того как посчитан embed, индекс не перестраивать (embed.py это проверяет).
-
-path хранится ОТНОСИТЕЛЬНО PHOTOS_DIR («<listing_id>/<n>.jpg»): индекс, посчитанный
-на Kaggle, работает локально без правок. Абсолютный путь — колонка abs_path.
-"""
 from pathlib import Path
 
 import pandas as pd
@@ -16,8 +8,6 @@ IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def build_photo_index(photos_dir=PHOTOS_DIR) -> pd.DataFrame:
-    """Ожидает photos/<listing_id>/*.jpg. Если у вас другая раскладка
-    (одна папка, listing_id в имени файла, CSV со ссылками) — меняется только эта функция."""
     rows = []
     for d in sorted(p for p in Path(photos_dir).iterdir() if p.is_dir()):
         files = sorted(f for f in d.iterdir() if f.suffix.lower() in IMG_EXT)

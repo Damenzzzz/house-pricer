@@ -1,17 +1,3 @@
-"""Веб-сервер Baga AI: JSON API + статический фронтенд (web/).
-
-    uvicorn server:app --port 8501        ->  http://localhost:8501
-
-Страницы:  /  (главная)   /app  (поиск, ассистент, по фото, проверка цены)
-           /login          /admin (панель админа)
-API — /api/*. Та же логика, что у Telegram-бота и MCP-сервера: agent.invoke, api.*,
-explain, voice. Роли и лимиты — auth.py, трейсы — tracing.py.
-
-Почему FastAPI + свой фронтенд, а не Streamlit: главной странице нужны анимации и
-вёрстка, которых Streamlit не даёт, а сценарию «ассистент остановился и спрашивает»
-нужен настоящий запрос-ответ, а не перезапуск всего скрипта на каждый клик.
-Эндпоинты синхронные: FastAPI выполняет их в пуле потоков, модели и индексы общие.
-"""
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -36,8 +22,6 @@ SESSION_DAYS = 30
 
 @asynccontextmanager
 async def lifespan(_app):
-    """Первый админ из окружения и прогрев индексов в фоне: первый посетитель не ждёт
-    загрузку SigLIP и Qdrant (~20 с)."""
     auth.bootstrap_admin()
     if os.getenv("WARMUP", "1") == "1":
         import threading
@@ -56,10 +40,7 @@ async def lifespan(_app):
 app = FastAPI(title="Baga AI", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
 
 
-# --------------------------------------------------------------- сессии
-
 def _secret() -> str:
-    """Ключ подписи cookie: из BAGA_SECRET или сгенерированный и сохранённый в var/."""
     if s := os.getenv("BAGA_SECRET"):
         return s
     p = C.VAR_DIR / "secret.key"
@@ -100,7 +81,6 @@ def _set_session(resp: Response, v: Viewer):
 
 @app.middleware("http")
 async def guest_sid(request: Request, call_next):
-    """У гостя тоже есть стабильный id — для лимитов, трейсов и отзывов."""
     resp = await call_next(request)
     if not request.cookies.get("baga_sid") and not request.cookies.get("baga"):
         resp.set_cookie("baga_sid", secrets.token_hex(6), max_age=SESSION_DAYS * 86400, httponly=True,
@@ -120,8 +100,6 @@ def require(permission: str):
 def llm_allowed(v: Viewer) -> bool:
     return auth.can(v.role, "llm") and auth.limiter.allow(f"web:{v.uid}", v.role)
 
-
-# --------------------------------------------------------------- данные для карточек
 
 @lru_cache(maxsize=1)
 def _photo_maps():
@@ -157,7 +135,6 @@ ROOM_RU = {"kitchen": "кухня", "living_room": "гостиная", "bedroom"
 
 
 def card(r: dict) -> dict:
-    """Результат поиска -> то, что рисует фронтенд. Без путей к файлам и сырых скоров."""
     by_path, first = _photo_maps()
     l, pc = r.get("listing", {}), r.get("price_check") or {}
     photos = r.get("photos", [])
@@ -171,14 +148,12 @@ def card(r: dict) -> dict:
         "matched": sorted({ROOM_RU.get(p.get("room_type"), p.get("room_type")) for p in photos
                            if p.get("room_type")}),
         "by_description": "desc" in (r.get("rank_by") or {}),
-        "coverage": r.get("coverage"),                     # «2 из 3» ваших фото закрыто
+        "coverage": r.get("coverage"),
         "band": {k: _num(pc.get(k)) for k in ("p10", "p50", "p90")} if pc.get("p10") else None,
         "verdict": pc.get("verdict"), "diff_pct": _num(pc.get("diff_pct")), "reliable": pc.get("reliable"),
         "duplicates": int(_trust().get(str(r["listing_id"]), 0) or 0),
     }
 
-
-# --------------------------------------------------------------- страницы
 
 def _page(name: str):
     return FileResponse(WEB / name, headers={"Cache-Control": "no-cache"})
@@ -205,12 +180,10 @@ def page_admin():
 
 
 @app.get("/healthz", include_in_schema=False)
-@app.get("/_stcore/health", include_in_schema=False)       # совместимость со старым healthcheck
+@app.get("/_stcore/health", include_in_schema=False)
 def health():
     return {"ok": True}
 
-
-# --------------------------------------------------------------- авторизация
 
 class Credentials(BaseModel):
     username: str
@@ -251,8 +224,6 @@ def logout(response: Response):
     return {"ok": True}
 
 
-# --------------------------------------------------------------- справочники и демо
-
 @app.get("/api/meta")
 @lru_cache(maxsize=1)
 def meta():
@@ -270,7 +241,6 @@ DEMO_QUERY = "светлая кухня, белые фасады"
 
 @app.get("/api/demo")
 def demo():
-    """Живое демо для главной: настоящие объявления из базы по стилевому запросу. Без LLM."""
     return _demo()
 
 
@@ -282,8 +252,6 @@ def _demo():
     return {"query": "двушка в Алматы до 450 тысяч, " + DEMO_QUERY,
             "results": [card(r) for r in res["results"]]}
 
-
-# --------------------------------------------------------------- ассистент (LangGraph)
 
 class AssistantIn(BaseModel):
     query: str = Field(min_length=2, max_length=500)
@@ -323,8 +291,6 @@ def assistant_resume(body: ResumeIn, v: Viewer = Depends(require("assistant"))):
     state, trace_id = agent.invoke(resume=body.confirmed, thread_id=body.thread_id, user_id=v.uid, channel="web")
     return _agent_out(state, trace_id, body.thread_id)
 
-
-# --------------------------------------------------------------- поиск
 
 class SearchIn(BaseModel):
     query: Optional[str] = Field(None, max_length=500)
@@ -388,8 +354,6 @@ def search_photo(images: list[UploadFile] = File(...), city: Optional[str] = For
             Path(p).unlink(missing_ok=True)
 
 
-# --------------------------------------------------------------- цена
-
 @app.get("/api/listing/{listing_id}/explain")
 def explain_listing(listing_id: str, v: Viewer = Depends(viewer)):
     import api
@@ -450,8 +414,6 @@ def price_check(body: PriceIn, v: Viewer = Depends(viewer)):
                             for c in est.get("comparables", [])[:5]]}
 
 
-# --------------------------------------------------------------- голос
-
 @app.post("/api/voice/transcribe")
 def voice_transcribe(audio: UploadFile = File(...), v: Viewer = Depends(require("voice"))):
     import voice
@@ -478,8 +440,6 @@ def voice_speak(body: SpeakIn, v: Viewer = Depends(require("voice"))):
     return Response(wav, media_type="audio/wav")
 
 
-# --------------------------------------------------------------- отзывы
-
 class FeedbackIn(BaseModel):
     kind: str = Field(pattern="^(assistant|search|price)$")
     value: int = Field(ge=0, le=1)
@@ -500,8 +460,6 @@ def feedback(body: FeedbackIn, v: Viewer = Depends(require("feedback"))):
     return {"ok": True}
 
 
-# --------------------------------------------------------------- админка
-
 @app.get("/api/admin/summary")
 def admin_summary(days: int = 7, v: Viewer = Depends(require("admin"))):
     import llm
@@ -518,8 +476,6 @@ def admin_summary(days: int = 7, v: Viewer = Depends(require("admin"))):
             "feedback": store.feedback_summary(), "recent_feedback": store.recent_feedback(30),
             "users": auth.list_users(), "langfuse": os.getenv("LANGFUSE_BASE_URL")}
 
-
-# --------------------------------------------------------------- статика и ошибки
 
 @app.exception_handler(HTTPException)
 def http_error(request: Request, exc: HTTPException):

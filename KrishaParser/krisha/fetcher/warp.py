@@ -1,4 +1,3 @@
-"""Opt-in reconnect of the installed WARP local proxy, never a system VPN mode."""
 from __future__ import annotations
 
 import json

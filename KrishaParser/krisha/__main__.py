@@ -1,4 +1,3 @@
-"""CLI entrypoint: ``python -m krisha <command> [options]``."""
 from __future__ import annotations
 
 import argparse

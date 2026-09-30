@@ -1,4 +1,3 @@
-"""Logging: file + console, UTF-8, no secrets."""
 from __future__ import annotations
 
 import logging

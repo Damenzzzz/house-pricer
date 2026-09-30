@@ -1,9 +1,3 @@
-"""Контракт данных объявлений.
-
-Парсер может отдавать колонки как угодно — к одной схеме всё приводится здесь.
-Остальной код (поиск, модель цены) знает только эту схему. Когда придут реальные
-данные, правится RENAME, остальное должно заработать само.
-"""
 import re
 from typing import Optional
 
@@ -19,18 +13,13 @@ NUMERIC = ["price", "area", "rooms", "floor", "floors_total", "year_built",
 CATEGORICAL = ["city", "district", "building_type", "condition", "bathroom", "complex_name"]
 TEXT = ["title", "address", "description", "url"]
 
-# "как колонка называется у парсера": "как у нас". Сейчас — схема KrishaParser (krisha.db).
 RENAME = {"id": "listing_id", "price_kzt": "price", "area_total": "area",
           "area_kitchen": "kitchen_area", "renovation_text": "condition"}
 
-# Санитарные границы цены за м², отдельно для продажи и аренды (аренда — ₸/м² в месяц).
-# Аренда: по krisha.db медиана 6 000, 99.9% объявлений в 1 200–24 500.
-# Всё, что за границами, — опечатки и «35 000 ₸ за 80 м²», а не рынок.
 PRICE_PER_M2_BOUNDS = {"sale": (50_000, 5_000_000), "rent": (1_000, 30_000)}
 AREA_MIN, AREA_MAX = 8, 1000
 CURRENT_YEAR = 2026
 
-# Парсер пишет латиницей, а запросы (и LLM) будут на русском — приводим к русскому.
 CITY_NAMES = {"almaty": "алматы", "kaskelen": "каскелен", "astana": "астана"}
 DISTRICT_NAMES = {"bostandyk": "бостандыкский", "alatau": "алатауский", "almalin": "алмалинский",
                   "medeu": "медеуский", "auezov": "ауэзовский", "nauryzbay": "наурызбайский",
@@ -52,7 +41,6 @@ def _read_any(path) -> pd.DataFrame:
 
 
 def _to_number(s: pd.Series) -> pd.Series:
-    """«45 000 000 〒» -> 45000000, «65,5 м²» -> 65.5. Числа не трогаем."""
     if pd.api.types.is_numeric_dtype(s):
         return s.astype(float)
     cleaned = (s.astype("string").str.replace(",", ".", regex=False)
@@ -61,7 +49,6 @@ def _to_number(s: pd.Series) -> pd.Series:
 
 
 def _district_ru(v):
-    """«bostandykskiy_r-n» -> «бостандыкский р-н». Русские названия не трогаем."""
     if v is None or v is pd.NA or (isinstance(v, float) and np.isnan(v)):
         return pd.NA
     for key, ru in DISTRICT_NAMES.items():
@@ -74,8 +61,6 @@ DISTRICT_RE = re.compile(r"([А-Яа-яЁё\-]+)\s+р-н")
 
 
 def district_from_address(addr) -> object:
-    """«Медеуский р-н, мкр Самал-2, ...» -> «медеуский р-н». В колонке district район
-    заполнен у 39% строк, в адресе — у 55%, адрес есть у всех."""
     if not isinstance(addr, str):
         return pd.NA
     m = DISTRICT_RE.search(addr)
@@ -99,7 +84,7 @@ def normalize(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df["city"] = df["city"].replace(CITY_NAMES)
     if "district" in df:
         df["district"] = df["district"].map(_district_ru).astype("string")
-    if "address" in df:   # добираем район из адреса там, где колонка пустая
+    if "address" in df:
         from_addr = df["address"].map(district_from_address).astype("string")
         df["district"] = df["district"].fillna(from_addr) if "district" in df else from_addr
     if "district" in df:
@@ -113,7 +98,7 @@ def normalize(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         report[why] = int(mask.sum())
         return df[~mask]
 
-    if "rent_period" in df:   # посуточная аренда — другой рынок, в модель не берём
+    if "rent_period" in df:
         df = drop(df.rent_period.fillna("month") != "month", "посуточная аренда")
     df = drop(df.duplicated("listing_id"), "дубли listing_id")
     df = drop(df.price.isna() | (df.price <= 0), "нет цены")
@@ -158,11 +143,7 @@ def load_listings() -> pd.DataFrame:
     return pd.read_parquet(LISTINGS_PATH)
 
 
-# ---------------------------------------------------------------- фильтры
-
 class Filters(BaseModel):
-    """Жёсткие условия запроса. Сейчас заполняются из CLI, потом ту же схему заполнит LLM
-    из текста пользователя («двушка в Алматы до 40 млн» -> rooms=[2], city, price_max)."""
     city: Optional[str] = None
     districts: Optional[list[str]] = Field(None, description="подстрока названия района")
     rooms: Optional[list[int]] = None
@@ -177,7 +158,6 @@ class Filters(BaseModel):
 
 
 def _b(s: pd.Series) -> pd.Series:
-    """Сравнения с пропусками дают NA — считаем их «не подходит»."""
     return s.fillna(False).astype(bool)
 
 

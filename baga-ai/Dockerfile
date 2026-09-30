@@ -1,10 +1,3 @@
-# Baga AI: сайт (FastAPI + web/), Telegram-бот и MCP-сервер — один образ, разные команды.
-#
-#   docker compose up -d            — Qdrant + загрузка индекса + сайт на :8501
-#   docker compose --profile telegram up -d   — ещё и бот
-#
-# Веса SigLIP 2 скачиваются при сборке: контейнер стартует без интернета до Hugging Face
-# и без минутной загрузки модели на первый запрос.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,15 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BAGA_VAR=/data/var \
     COOKIE_SECURE=0
 
-# ffmpeg — голосовые ответы в Telegram (WAV -> OGG/Opus); libgomp — CatBoost и torch на CPU
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# torch для CPU отдельно: колесо с CUDA весит ~2.5 ГБ, а GPU сервису не нужен —
-# на CPU кодируется только текст запроса или одна картинка (~50 мс)
 RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .
 RUN pip install -r requirements.txt

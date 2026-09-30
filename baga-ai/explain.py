@@ -1,11 +1,3 @@
-"""Объяснение цены через LLM по найденным аналогам (RAG).
-
-Контекст модели — не «весь интернет», а конкретные похожие объявления из нашей базы.
-Поэтому объяснение проверяемо: в тексте стоят id, по которым можно открыть исходные
-объявления и убедиться.
-
-Формулировки осторожные: мы знаем цены объявлений, а не сделок.
-"""
 import llm
 from guardrails import check_input, guard_output, mask_pii
 
@@ -21,7 +13,6 @@ SYSTEM = """Ты помощник по аренде квартир в Казах
 
 
 def _clean(v):
-    """pd.NA в условиях бросает «boolean value of NA is ambiguous» — приводим к None."""
     try:
         import pandas as pd
         if v is None or (not isinstance(v, str) and pd.isna(v)):
@@ -61,8 +52,6 @@ def _facts(listing: dict, est: dict) -> str:
 
 def _complete(system: str, user: str, temperature=None, top_p=None, max_tokens=None, *,
               task: str = "generate", providers=None, thinking=None, use_cache=None) -> dict:
-    """Один вызов модели через шлюз llm.py (Gemini → ALEM). Отдаёт и текст, и finish_reason:
-    "length" значит, что ответ обрезан по max_tokens — одна из метрик A/B."""
     r = llm.complete(system, user, task=task, temperature=temperature, top_p=top_p, max_tokens=max_tokens,
                      providers=providers, thinking=thinking, use_cache=use_cache)
     return {"text": r.text, "finish_reason": r.finish_reason, "completion_tokens": r.completion_tokens,
@@ -76,7 +65,6 @@ def _money(x) -> str:
 
 
 def price_facts(listing: dict, est: dict) -> tuple[list[float], list[str]]:
-    """Числа и id, которые модели разрешено упоминать: всё, что есть в её контексте."""
     nums = [est.get("p10"), est.get("p50"), est.get("p90"), _clean(listing.get("price"))]
     comps = est.get("comparables", [])[:5]
     nums += [c["price"] for c in comps]
@@ -84,8 +72,6 @@ def price_facts(listing: dict, est: dict) -> tuple[list[float], list[str]]:
 
 
 def template_explanation(listing: dict, est: dict) -> str:
-    """Запасной ответ без LLM — из тех же фактов. Подставляется, если модель выдумала
-    сумму или id, и когда LLM недоступна."""
     price = _clean(listing.get("price"))
     head = f"В объявлении {_money(price)} в месяц. " if price else ""
     text = (f"{head}Похожие объявления сдают за {_money(est['p10'])} – {_money(est['p90'])}, "
@@ -99,15 +85,11 @@ def template_explanation(listing: dict, est: dict) -> str:
 
 
 def explain_price_raw(listing: dict, est: dict, temperature=None, top_p=None, max_tokens=None, **kw) -> dict:
-    """Ответ модели БЕЗ выходного фильтра — для экспериментов, где меряется сама модель."""
     return _complete(SYSTEM, _facts(listing, est) + "\n\nОбъясни вывод.", temperature, top_p, max_tokens,
                      task="explain_price", **kw)
 
 
 def explain_price(listing: dict, est: dict, temperature: float | None = None) -> str:
-    """Короткое объяснение вердикта. listing — карточка, est — ответ estimate_price.
-    Прошедшее через выходной фильтр: выдуманная сумма или id -> шаблонный ответ.
-    Все модели недоступны -> тот же шаблон: вердикт не зависит от LLM, только формулировка."""
     try:
         raw = explain_price_raw(listing, est, temperature)["text"]
     except llm.LLMUnavailable as e:
@@ -141,8 +123,6 @@ def explain_by_id(listing_id: str, temperature: float | None = None) -> str:
     return explain_price(api.get_listing(listing_id), api.estimate_price(listing_id=listing_id), temperature)
 
 
-# --------------------------------------------------------------- ответ по результатам поиска
-
 SEARCH_SYSTEM = """Ты помощник по аренде квартир. Пользователь описал желаемый ремонт,
 система нашла объявления по фотографиям и описаниям. Напиши короткий ответ, 3-5 предложений.
 
@@ -166,19 +146,16 @@ def _search_context(query: str, results: list[dict]) -> str:
         if pc.get("verdict"):
             line += f" · оценка: {pc['verdict']}"
         lines.append(line)
-        desc = mask_pii((l.get("description") or "")[:200])[0]     # телефоны риелторов — не в LLM
+        desc = mask_pii((l.get("description") or "")[:200])[0]
         if desc:
             lines.append(f"      описание: {desc}")
     return "\n".join(lines)
 
 
 def answer_search(query: str, results: list[dict], temperature: float | None = None) -> str:
-    """Генерация ответа по результатам векторного поиска — это и есть шаг G в RAG:
-    контекст собран ретривером (фото + описания), модель только пересказывает найденное."""
     if not results:
         return "По таким условиям ничего не нашлось."
     guard = check_input(query)
-    # инъекцию в LLM не передаём: модель пересказывает выдачу, не видя текста запроса
     shown_query = "(текст запроса скрыт фильтром безопасности)" if guard.blocked else guard.text
     try:
         raw = _complete(SEARCH_SYSTEM, _search_context(shown_query, results), temperature,
@@ -187,7 +164,6 @@ def answer_search(query: str, results: list[dict], temperature: float | None = N
         _log_fallback("answer_search", e)
         return _template_search(results)
 
-    # числа из запроса пользователя («до 600 тысяч») модель вправе повторить — это не выдумка
     from semantic_cache import _numbers
     nums, ids = [float(n) for n in _numbers(query.lower())], []
     for r in results:

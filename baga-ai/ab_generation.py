@@ -1,25 +1,3 @@
-"""A/B параметров генерации: temperature, top_p, max_tokens.
-
-Что меряем. Для наших ответов важна не «красота», а достоверность и полнота:
-  придуманные суммы — числа-суммы в тексте, которых нет в переданных фактах;
-  выдуманные id     — [id] в тексте, которых нет среди переданных объявлений;
-  обрезано          — finish_reason == "length": ответ упёрся в max_tokens и оборван;
-  отказ фильтра     — доля ответов, которые выходной guardrail заменил бы шаблоном.
-Плюс длина ответа, токены и время. Проверки те же, что в проде (guardrails.check_output):
-эксперимент меряет ровно то, что потом отсекает фильтр.
-
-Эксперименты:
-  temperature  0.0 / 0.3 / 0.7                         (top_p 1.0, max_tokens 400)
-  top_p        0.5 / 0.9 / 1.0 при temperature 0.7     — при temperature 0 декодирование
-               жадное и top_p ни на что не влияет, поэтому сравнивать его имеет смысл
-               только там, где модель действительно сэмплирует.
-  max_tokens   100 / 200 / 400 / 800 при temperature 0 — на ОБЕИХ задачах: объяснение
-               цены (2–4 предложения) и ответ по выдаче (3–5 предложений, длиннее).
-               Лимит общий (CHAT_MAX_TOKENS), значит выбирать его надо по длинной задаче.
-
-Запуск: python ab_generation.py [--only temperature|top_p|max_tokens] [--n 12]
-Результаты: artifacts/ab_generation.json
-"""
 import argparse
 import json
 import time
@@ -45,7 +23,6 @@ EXPERIMENTS = {
 
 
 def allowed_numbers(listing: dict, est: dict) -> list[float]:
-    """Оставлено для совместимости: те же факты, что видит выходной фильтр."""
     return price_facts(listing, est)[0]
 
 
@@ -56,8 +33,6 @@ def check(text: str, listing: dict, est: dict) -> dict:
             "_invented": r["invented_numbers"], "выдуманных id": len(r["invented_ids"]),
             "длина, симв.": len(text)}
 
-
-# --------------------------------------------------------------- задачи
 
 def price_tasks(df: pd.DataFrame, n: int, seed=0) -> list[dict]:
     out = []
@@ -70,8 +45,6 @@ def price_tasks(df: pd.DataFrame, n: int, seed=0) -> list[dict]:
 
 
 def search_tasks(df: pd.DataFrame, n: int, seed=0) -> list[dict]:
-    """Ответ по выдаче: 6 объявлений одного района, как их вернул бы поиск.
-    Выдачу собираем из базы, а не из поиска, — меряем генерацию, а не ретривер."""
     out = []
     districts = df.district.value_counts().index[:n]
     for i, d in enumerate(districts):

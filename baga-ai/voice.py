@@ -1,21 +1,3 @@
-"""Голос: речь → текст → агент → текст → речь.
-
-Сценарий, ради которого это сделано: человек смотрит квартиры с телефона на ходу и
-говорит «двушка в Бостандыке до четырёхсот, чтобы кухня светлая» вместо набора
-текста с фильтрами. Ответ можно прослушать, не читая.
-
-Каскад, а не нативная audio-to-audio модель (Gemini Live): между ушами и голосом стоит
-тот же LangGraph-агент с фильтрами, подтверждением и guardrails. Нативная голосовая
-модель отвечала бы сама — без поиска по базе и без проверки цифр.
-
-  STT — Gemini 3.6 Flash (аудио на вход): русский, казахские топонимы, числа
-        «четыреста тысяч» -> «400 тысяч». Проверено: фраза с ценой и районом распознана
-        дословно за 2.6 с.
-  TTS — Gemini 2.5 Flash Lite TTS (голос Kore), ~4 с на ответ из 3–4 предложений.
-
-ALEM аудио не принимает, поэтому фолбэк голоса — честный отказ «наберите текстом»,
-а не тишина. Всё идёт через трейсинг: STT — как generation шлюза llm.py, TTS — отдельно.
-"""
 import io
 import re
 import time
@@ -53,7 +35,6 @@ def transcribe(audio: bytes, mime: str = "audio/wav", user_id: str | None = None
 
 
 def speakable(text: str) -> str:
-    """Для озвучки: без [id] объявлений и markdown, не длиннее MAX_TTS_CHARS."""
     t = re.sub(r"\[\d{6,}\]", "", text)
     t = re.sub(r"[*_`#>]", "", t)
     t = re.sub(r"\s+", " ", t).strip()
@@ -64,7 +45,6 @@ def speakable(text: str) -> str:
 
 
 def synthesize(text: str) -> bytes | None:
-    """WAV-байты или None, если TTS недоступен (ответ остаётся текстом)."""
     import tracing
     from google.genai import types
     import llm
@@ -114,7 +94,7 @@ def _ffmpeg() -> str | None:
     exe = shutil.which("ffmpeg")
     if exe:
         return exe
-    try:                                       # pip install imageio-ffmpeg — ffmpeg без brew/apt
+    try:
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:
@@ -122,8 +102,6 @@ def _ffmpeg() -> str | None:
 
 
 def normalize_audio(data: bytes, mime: str) -> tuple[bytes, str]:
-    """Браузеры пишут webm (Chrome, Firefox) или mp4 (Safari), а Gemini их не принимает —
-    перекодируем в WAV 16 кГц моно. Поддерживаемые форматы отдаём как есть."""
     import subprocess
     if mime in GEMINI_AUDIO:
         return data, mime
@@ -138,8 +116,6 @@ def normalize_audio(data: bytes, mime: str) -> tuple[bytes, str]:
 
 
 def wav_to_ogg_opus(wav: bytes) -> bytes | None:
-    """Голосовое сообщение Telegram принимает только OGG/Opus. Нужен ffmpeg (есть в
-    Docker-образе) или пакет imageio-ffmpeg; без них бот отвечает текстом."""
     import subprocess
     exe = _ffmpeg()
     if not exe:

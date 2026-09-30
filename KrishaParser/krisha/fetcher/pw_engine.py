@@ -1,8 +1,3 @@
-"""Fallback engine: real Chromium via Playwright (sync API).
-
-Required for detail pages (/a/show/) which return an anti-bot 468 to plain HTTP
-clients. Browser + context are launched lazily and reused across requests.
-"""
 from __future__ import annotations
 
 import time
@@ -42,7 +37,7 @@ class PlaywrightEngine(Fetcher):
     def _ensure(self) -> None:
         if self._ctx is not None:
             return
-        from playwright.sync_api import sync_playwright  # lazy import
+        from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
         options = {"headless": self._headless}
@@ -60,8 +55,6 @@ class PlaywrightEngine(Fetcher):
         )
 
     def _warmup(self) -> None:
-        """Visit the homepage once so the context looks like a real session
-        (cookies, referer chain) before requesting protected detail pages."""
         if self._warmed:
             return
         self._warmed = True
@@ -69,7 +62,7 @@ class PlaywrightEngine(Fetcher):
         try:
             page.goto(config.BASE_URL, wait_until="domcontentloaded",
                      timeout=int(config.REQUEST_TIMEOUT_S * 1000))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.debug("pw warmup failed: %s", type(e).__name__)
         finally:
             page.close()
@@ -92,7 +85,7 @@ class PlaywrightEngine(Fetcher):
             status = resp.status if resp else None
             retry_after = parse_retry_after(resp.header_value("retry-after")) if resp else None
             text = page.content()
-        except Exception as e:  # noqa: BLE001 - navigation/timeout
+        except Exception as e:
             log.warning("playwright error %s: %s", url, type(e).__name__)
             status = status or None
             if self._headless:
@@ -104,7 +97,6 @@ class PlaywrightEngine(Fetcher):
         return FetchResult(url, status, text, self.name, latency, retry_after=retry_after)
 
     def rotate_proxy(self) -> bool:
-        """Advance through configured routes once; never silently fall back direct."""
         if self._proxy_index + 1 >= len(self._proxies):
             if self._proxies and warp.enabled(self._proxies[self._proxy_index]):
                 self.close()
@@ -124,7 +116,7 @@ class PlaywrightEngine(Fetcher):
             fname = config.LOGS_DIR / f"debug_stop_{int(time.time())}.png"
             page.screenshot(path=str(fname))
             log.info("saved debug screenshot %s for %s", fname, url)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     def close(self) -> None:
@@ -135,7 +127,7 @@ class PlaywrightEngine(Fetcher):
                 self._browser.close()
             if self._pw:
                 self._pw.stop()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         self._ctx = self._browser = self._pw = None
         self._warmed = False

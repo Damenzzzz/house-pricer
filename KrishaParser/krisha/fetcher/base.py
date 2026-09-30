@@ -1,4 +1,3 @@
-"""Engine interface shared by the httpx and Playwright fetchers."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -47,7 +46,6 @@ class FetchResult:
         return any(m in low for m in config.CAPTCHA_MARKERS)
 
     def classify(self) -> str:
-        """Map to a scrape_events outcome (parse-level outcomes set by caller)."""
         if self.status_code == 429:
             return "http_429"
         if self.status_code in (403, 468):
@@ -68,5 +66,5 @@ class Fetcher(ABC):
     def fetch(self, url: str, referer: str | None = None) -> FetchResult:
         ...
 
-    def close(self) -> None:  # pragma: no cover - optional
+    def close(self) -> None:
         pass

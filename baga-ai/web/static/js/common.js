@@ -1,5 +1,3 @@
-// Общие функции страниц: API, сессия, навигация, коридор цены, карточка объявления.
-
 export const LOGO = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 25 11 11l5 7 4-5 10 12Z" fill="#18202B"/>
 <path d="m11 11 2.6 4-2.6 1.6L8.6 15Z" fill="#EEF1F4"/><circle cx="24" cy="8" r="3" fill="#C73E2E"/></svg>`;
 
@@ -80,7 +78,6 @@ export function verdictText(price, band) {
   return "в коридоре похожих";
 }
 
-/** Коридор цены. Шкала — от 0.6·p10 до 1.4·p90, чтобы точка «сильно дороже» не упиралась в край. */
 export function bandHTML(price, band, { legend = true, animate = false } = {}) {
   if (!band || band.p10 == null) return `<p class="small muted">Похожих объявлений мало — диапазон не считаем.</p>`;
   const lo = Math.min(band.p10 * 0.6, price ?? Infinity), hi = Math.max(band.p90 * 1.4, price ?? 0);
@@ -120,7 +117,6 @@ export function cardHTML(c, { explain = true } = {}) {
   </article>`;
 }
 
-/** «Почему такая цена» — раскрывается в карточке, повторный клик сворачивает. */
 export function wireExplain(root) {
   root.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-why]");
@@ -138,7 +134,6 @@ export function wireExplain(root) {
   });
 }
 
-/** [1015807119] в тексте ответа -> ссылка на карточку ниже. */
 export function linkify(html, { external = false } = {}) {
   return html.replace(/\[(\d{6,})\]/g, (_, id) => external
     ? `<a href="https://krisha.kz/a/show/${id}" target="_blank" rel="noopener">[${id}]</a>`

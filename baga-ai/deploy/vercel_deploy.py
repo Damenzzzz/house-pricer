@@ -1,18 +1,4 @@
-"""Деплой сайта на Vercel: статический фронтенд из web/ + прокси /api на бэкенд.
-
-    python deploy/vercel_deploy.py [BACKEND_URL]
-
-BACKEND_URL — где работает server.py: адрес туннеля (var/tunnel_url.txt), Hugging Face Space
-или любой другой хост. Vercel отдаёт страницы со своего CDN, а /api/* и /healthz переписывает
-на бэкенд — для браузера это один сайт на домене vercel.app, поэтому cookie сессии работают.
-
-Почему бэкенд не на Vercel: функции Vercel для Python ограничены 500 МБ, а torch и SigLIP 2
-весят ~2 ГБ; к тому же пауза ассистента на подтверждение живёт в памяти процесса между
-запросами, а у serverless-функций постоянного процесса нет.
-
-Вход в Vercel: `npx vercel login` один раз (или VERCEL_TOKEN в .env).
-"""
-from __future__ import annotations  # str | None на системном python3.9
+from __future__ import annotations
 
 import json
 import shutil
@@ -35,7 +21,6 @@ def backend_url() -> str:
 
 
 def _env_value(key: str) -> str | None:
-    """Без python-dotenv: скрипт запускается и системным python3."""
     env = ROOT / ".env"
     if not env.exists():
         return None
@@ -50,7 +35,7 @@ def main():
     out = Path(tempfile.mkdtemp(prefix="baga-vercel-"))
     shutil.copytree(ROOT / "web", out, dirs_exist_ok=True)
     (out / "vercel.json").write_text(json.dumps({
-        "cleanUrls": True,                       # /app -> app.html, /login -> login.html
+        "cleanUrls": True,
         "trailingSlash": False,
         "rewrites": [
             {"source": "/api/:path*", "destination": f"{backend}/api/:path*"},

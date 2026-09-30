@@ -1,5 +1,3 @@
-"""API сайта без моделей поиска: вход, роли, проверка цены, отзывы, админка.
-Поиск и ассистент здесь не вызываются — им нужны SigLIP и Qdrant (гигабайты)."""
 import os
 
 os.environ["WARMUP"] = "0"
@@ -58,7 +56,7 @@ def test_price_by_link_and_errors():
     assert r.status_code == 200
     body = r.json()
     assert body["band"]["p10"] < body["band"]["p50"] < body["band"]["p90"]
-    assert body["llm"] is False and body["text"]            # гость — шаблон без LLM
+    assert body["llm"] is False and body["text"]
     assert c.post("/api/price", json={"link": "https://krisha.kz/a/show/999999999"}).status_code == 404
     assert c.post("/api/price", json={"link": "не ссылка"}).status_code == 400
     r = c.post("/api/price", json={"area": 60, "rooms": 2, "city": "алматы", "price": 550000})

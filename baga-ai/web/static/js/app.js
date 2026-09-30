@@ -13,8 +13,6 @@ const MODES = ["assistant", "describe", "photo", "price"];
 let viewer = { role: "guest", permissions: [] };
 let meta = null;
 
-// ---------------------------------------------------------------- режимы
-
 function setMode(mode, { push = true } = {}) {
   if (!MODES.includes(mode)) mode = can(viewer, "assistant") ? "assistant" : "describe";
   for (const m of MODES) {
@@ -42,8 +40,6 @@ document.querySelector(".modes").addEventListener("keydown", (e) => {
   setMode(next);
   $(`#t-${next}`).focus();
 });
-
-// ---------------------------------------------------------------- общие куски
 
 const busy = (el, text) => (el.innerHTML = `<div class="status"><span class="spinner" aria-hidden="true"></span>${esc(text)}</div>`);
 const fail = (el, err) => (el.innerHTML = `<p class="error">${esc(err.message || err)}</p>`);
@@ -77,8 +73,6 @@ document.addEventListener("click", async (e) => {
     toast("Спасибо, отзыв записан");
   } catch (err) { toast(err.message); delete row.dataset.sent; }
 });
-
-// ---------------------------------------------------------------- ассистент
 
 const assistantOut = $("#assistant-out");
 let lastAnswer = "";
@@ -118,7 +112,6 @@ function renderAgent(r, query) {
     f.rooms && `${f.rooms.join(" или ")} комн.`,
     f.price_min && `от ${thousands(f.price_min)}`, f.price_max && `до ${thousands(f.price_max)}`,
     f.area_min && `от ${f.area_min} м²`, f.not_first_floor && "не первый этаж", f.not_last_floor && "не последний этаж",
-    // если модель не выделила стиль, в поиск по фото уходит весь запрос — чип его не дублирует
     r.style && r.style.trim().toLowerCase() !== query.trim().toLowerCase() && `на фото: ${r.style}`,
   ].filter(Boolean);
   assistantOut.innerHTML = `<div class="answer">
@@ -149,7 +142,6 @@ async function speak(text, btn) {
   } catch (err) { toast(err.message); btn.textContent = "Послушать ответ"; btn.disabled = false; }
 }
 
-// голос: запись в браузере -> расшифровка на сервере -> тот же запрос ассистенту
 const mic = $("#mic");
 let rec = null;
 mic.addEventListener("click", async () => {
@@ -183,8 +175,6 @@ mic.addEventListener("click", async () => {
   mic.setAttribute("aria-label", "Остановить запись");
   toast("Говорите. Нажмите ещё раз, чтобы закончить.");
 });
-
-// ---------------------------------------------------------------- по описанию
 
 function fillSelect(sel, values, { keepFirst = true } = {}) {
   const first = keepFirst ? sel.querySelector("option") : null;
@@ -239,8 +229,6 @@ $("#desc-form").addEventListener("submit", async (e) => {
   } catch (err) { fail(describeOut, err); }
 });
 
-// ---------------------------------------------------------------- по фото
-
 const files = [];
 const thumbs = $("#thumbs"), drop = $("#drop"), photoOut = $("#photo-out");
 function drawThumbs() {
@@ -275,8 +263,6 @@ $("#photo-form").addEventListener("submit", async (e) => {
     showResults(r.results, `Проверено объявлений: ${r.n_candidates.toLocaleString("ru-RU")}.`);
   } catch (err) { fail(photoOut, err); }
 });
-
-// ---------------------------------------------------------------- проверка цены
 
 const priceOut = $("#price-out");
 function renderPrice(r) {
@@ -320,8 +306,6 @@ $("#price-form").addEventListener("submit", async (e) => {
   try { renderPrice(await api("/api/price", { method: "POST", body })); }
   catch (err) { fail(priceOut, err); }
 });
-
-// ---------------------------------------------------------------- старт
 
 (async () => {
   [viewer, meta] = await Promise.all([me(), api("/api/meta").catch(() => null)]);

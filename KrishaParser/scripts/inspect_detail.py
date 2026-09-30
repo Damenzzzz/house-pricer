@@ -1,4 +1,3 @@
-"""Capture a live detail page and its characteristics for parser diagnosis."""
 from __future__ import annotations
 
 import argparse

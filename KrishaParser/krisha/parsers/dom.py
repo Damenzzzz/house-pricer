@@ -1,21 +1,16 @@
-"""Tiny DOM adapter: selectolax fast-path, BeautifulSoup fallback.
-
-Exposes a uniform Node with .css(sel), .text(), .attr(name), .html so parsers
-don't care which backend is installed.
-"""
 from __future__ import annotations
 
 from typing import List, Optional
 
 try:
-    from selectolax.parser import HTMLParser as _SLX  # type: ignore
+    from selectolax.parser import HTMLParser as _SLX
     _BACKEND = "selectolax"
-except Exception:  # noqa: BLE001
+except Exception:
     _SLX = None
     _BACKEND = "bs4"
 
 if _BACKEND == "bs4":
-    from bs4 import BeautifulSoup  # type: ignore
+    from bs4 import BeautifulSoup
 
 
 class Node:

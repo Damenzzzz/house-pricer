@@ -15,12 +15,11 @@ def test_parse_detail_core_fields():
     assert f["floors_total"] == 5
     assert f["year_built"] == 1975
     assert f["building_type"] == "кирпичный"
-    assert f["bathroom"] == "разделен"  # current form is present alongside legacy fields
+    assert f["bathroom"] == "разделен"
     assert f["balcony"] == "балкон: нет; лоджия: 1"
     assert f["area_kitchen"] == 9.0
     assert f["rent_period"] == "month"
     assert f["deal_type"] == "rent"
-    # geo from window.data.advert.map
     assert 43.0 < f["lat"] < 44.0
     assert 76.0 < f["lon"] < 77.0
 
@@ -54,11 +53,11 @@ def test_definition_list_fields_and_empty_duplicates():
 
 def test_live_rental_20260923_names():
     res = parse_detail(read_fixture("detail_rental_20260923_params.html"))
-    assert res.fields["bathroom"] == "совмещен"  # not the separate `bathroom`=ванна field
+    assert res.fields["bathroom"] == "совмещен"
     assert res.fields["balcony"] == "балкон: 1"
     assert res.fields["complex_name"] == "Шахристан"
     assert res.fields["floor"] == res.fields["floors_total"] == 16
-    assert "year_built" not in res.fields  # not exposed on this live page
+    assert "year_built" not in res.fields
     assert "building_type" not in res.fields
 
 

@@ -23,7 +23,7 @@ def test_refresh_checkpoint_and_gallery_preservation(tmp_path):
         assert listing["detail_parser_version"] == PARSER_VERSION
         assert listing["last_seen_at"] == listing["detail_fetched_at"]
         assert db.ids_without_detail(refresh_missing=True) == []
-        assert listing["year_built"] is None  # absent at source, not endlessly retried
+        assert listing["year_built"] is None
         assert json.loads(listing["photo_urls"]) == ["https://cdn/a.jpg", "https://cdn/b.jpg", "https://cdn/c.jpg"]
         photos = db.photos_for(1)
         assert photos[0]["sha256"] == "abc"

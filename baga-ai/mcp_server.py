@@ -1,24 +1,3 @@
-"""MCP-сервер Baga AI: поиск аренды по стилю ремонта и проверка цены.
-
-Инструменты — тонкая обёртка над api.py, той же функцией пользуются сайт и агент.
-Поэтому ответ через MCP и на сайте один и тот же: разные только интерфейсы.
-
-    search_apartments  — поиск по условиям и описанию ремонта, с вердиктом по цене
-    check_rent_price   — диапазон похожих p10/p50/p90 и вердикт: по id, ссылке krisha.kz
-                         или по характеристикам квартиры, которой нет в базе
-    get_comparables    — аналоги, на которых построен вердикт (чтобы его можно было проверить)
-    get_listing        — карточка объявления
-
-Почему MCP, а не просто HTTP API. Потребитель здесь — LLM-клиент (Claude Desktop,
-Claude Code, Cursor): ему нужны не эндпоинты, а описанные инструменты со схемой
-параметров, которые модель сама выбирает по ходу разговора. MCP даёт это без
-отдельного клиента под каждое приложение: один сервер подключается к любому.
-
-Запуск (stdio):  python mcp_server.py
-Подключение в Claude Code:
-    claude mcp add baga-ai -- /путь/к/python /путь/к/baga-ai/mcp_server.py
-Проверка без клиента:  python mcp_server.py --selftest
-"""
 import contextlib
 import re
 import sys
@@ -43,8 +22,6 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotent
 
 @contextlib.contextmanager
 def _quiet_stdout():
-    """В stdio-режиме stdout — это канал протокола. Любой print при загрузке моделей
-    или индексов сломал бы клиенту разбор JSON-RPC, поэтому вывод уходит в stderr."""
     with contextlib.redirect_stdout(sys.stderr):
         yield
 
@@ -56,7 +33,6 @@ def _api():
 
 
 def _listing_id(value: str) -> str:
-    """Принимает id или ссылку вида https://krisha.kz/a/show/1014955701."""
     m = re.search(r"/a/show/(\d+)", value or "")
     lid = m.group(1) if m else str(value).strip()
     if not lid.isdigit():
@@ -79,7 +55,6 @@ def _photo_url(path: Optional[str]) -> Optional[str]:
 
 
 def _compact(r: dict) -> dict:
-    """Результат поиска без служебных полей: LLM-клиенту не нужны пути к файлам и сырые скоры фото."""
     l, pc = r.get("listing", {}), r.get("price_check") or {}
     photos = r.get("photos", [])
     return {
@@ -174,7 +149,6 @@ def get_listing(
 
 
 async def _selftest():
-    """Подключается к серверу как настоящий MCP-клиент (в памяти) и вызывает инструменты."""
     import json
 
     from mcp.shared.memory import create_connected_server_and_client_session as connect

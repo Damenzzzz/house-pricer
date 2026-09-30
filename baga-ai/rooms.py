@@ -1,12 +1,3 @@
-"""Zero-shot разметка фото: тип комнаты и «рендер или реальное фото».
-
-Зачем: в объявлениях половина фото — не комнаты (фасад, подъезд, планировка),
-а у новостроек стоят 3D-рендеры. Сгенерированная ИИ-картинка идеальна, рендер
-тоже идеален — без фильтра они будут в топе выдачи вместо реальных квартир.
-
-Несколько формулировок на класс усредняются (prompt ensembling): одна фраза
-шумная, среднее по 2-3 стабильнее. Качество проверяется в validate.py rooms.
-"""
 import numpy as np
 import pandas as pd
 
@@ -44,7 +35,6 @@ def _class_matrix(prompts):
 
 
 def classify(E, prompts):
-    """(N, D) -> (имена классов, вероятности (N, C))."""
     model, _, _ = load_model()
     scale = float(model.logit_scale.exp()) if hasattr(model, "logit_scale") else 100.0
     names, C = _class_matrix(prompts)
@@ -55,7 +45,6 @@ def classify(E, prompts):
 
 
 def room_of(q):
-    """Тип комнаты для одной query-картинки -> (комната, уверенность)."""
     names, P = classify(q[None], ROOM_PROMPTS)
     return names[int(P[0].argmax())], float(P[0].max())
 

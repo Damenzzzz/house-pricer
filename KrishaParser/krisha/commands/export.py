@@ -1,7 +1,3 @@
-"""`export --csv`: dump monthly listings with detail for ML.
-
-One row per listing; one representative per duplicate_group_id is kept (the
-lowest id) so a single flat cannot leak across train/test."""
 from __future__ import annotations
 
 import csv
@@ -29,9 +25,6 @@ def run(db: Database, out_path: str | None = None, dedup: bool = True) -> str:
     for r in rows:
         if r["rent_period"] not in (None, "month"):
             continue
-        # Keep rows usable for ML: either detail-enriched, or with the core
-        # card fields (price + area). Detail pages may be unavailable (anti-bot),
-        # in which case card-level data still forms a valid dataset.
         has_detail = r["detail_fetched_at"] is not None
         has_core = r["price_kzt"] is not None and r["area_total"] is not None
         if not (has_detail or has_core):

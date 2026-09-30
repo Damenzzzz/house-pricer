@@ -1,22 +1,3 @@
-"""Пользователи, роли и лимиты.
-
-Роли выбраны по деньгам, а не «для галочки»: каждое действие с LLM стоит токенов,
-поэтому доступ к ним и частота ограничены ролью.
-
-  guest — без регистрации: поиск по описанию и по фото, вердикт по цене. БЕЗ вызовов LLM:
-          объяснение цены и ответ по выдаче собираются шаблоном из фактов. Дёшево и
-          безопасно выставить в интернет.
-  user  — всё, что у гостя, плюс ассистент (LangGraph), объяснения LLM, голос.
-          Лимит LLM-действий в час.
-  admin — плюс админ-панель: расход и бюджет, здоровье провайдеров, кэш, отзывы.
-
-Пароли — PBKDF2-SHA256 (hashlib, 200 000 итераций, соль на пользователя): стандартная
-библиотека, без сторонних пакетов. Хранилище — JSON (var/users.json, не в git).
-Первый админ создаётся из BAGA_ADMIN_USER / BAGA_ADMIN_PASSWORD при старте.
-
-CLI:  python auth.py add <логин> [--role user|admin]   (пароль спросит)
-      python auth.py list
-"""
 import hashlib
 import hmac
 import json
@@ -34,7 +15,6 @@ PERMISSIONS = {
     "user": {"search", "photo_search", "assistant", "llm", "voice", "feedback"},
     "admin": {"search", "photo_search", "assistant", "llm", "voice", "feedback", "admin"},
 }
-# LLM-действий в час на пользователя (разбор + ответ ассистента, «Почему цена?», голос)
 RATE_LIMITS = {"guest": 0, "user": int(os.getenv("RATE_LIMIT_USER", 60)), "admin": 10_000}
 ITERATIONS = 200_000
 _lock = threading.Lock()
@@ -80,10 +60,9 @@ def add_user(username: str, password: str, role: str = "user", overwrite: bool =
 
 
 def verify(username: str, password: str) -> str | None:
-    """Роль при верном пароле, иначе None. Сравнение за постоянное время."""
     u = _load().get(username.strip().lower())
     if not u:
-        _hash(password, "timing-equalizer")     # одинаковое время ответа для несуществующих логинов
+        _hash(password, "timing-equalizer")
         return None
     return u["role"] if hmac.compare_digest(u["hash"], _hash(password, u["salt"])) else None
 
@@ -98,17 +77,12 @@ def can(role: str, permission: str) -> bool:
 
 
 def bootstrap_admin():
-    """Админ из переменных окружения — чтобы контейнер поднимался с рабочим входом."""
     user, pwd = os.getenv("BAGA_ADMIN_USER"), os.getenv("BAGA_ADMIN_PASSWORD")
     if user and pwd and user.lower() not in _load():
         add_user(user, pwd, "admin")
 
 
-# --------------------------------------------------------------- лимит частоты
-
 class RateLimiter:
-    """Скользящее окно в памяти процесса: N действий за window_s секунд."""
-
     def __init__(self, window_s: float = 3600):
         self.window_s, self.hits, self.lock = window_s, defaultdict(deque), threading.Lock()
 

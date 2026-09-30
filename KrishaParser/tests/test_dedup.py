@@ -17,7 +17,7 @@ def test_dedup_groups_same_flat_by_structure():
     db.upsert_stub(3, "u3", "kaskelen")
     common = dict(rooms=2, area_total=50.0, floor=3, address="Абая 10")
     db.update_detail(1, common)
-    db.update_detail(2, common)  # same flat re-posted
+    db.update_detail(2, common)
     db.update_detail(3, dict(rooms=1, area_total=30.0, floor=1, address="Иная 5"))
 
     run_dedup(db)

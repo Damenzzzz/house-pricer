@@ -1,19 +1,3 @@
-"""Деплой бэкенда на Hugging Face Spaces (Docker): сайт, API, Telegram-бот.
-
-С сентября 2026 Docker-Spaces на бесплатном CPU требуют подписку HF PRO (ответ 402).
-Сейчас бэкенд работает на нашем Mac за Cloudflare-туннелем (deploy/public_up.sh);
-этот скрипт — готовый переезд, если появится PRO.
-
-    python deploy/hf_deploy.py            # нужен HF_TOKEN (Write) в .env
-
-Почему Spaces, а не Vercel, для бэкенда: бесплатный CPU-тариф даёт 16 ГБ памяти и постоянный
-процесс. Нам нужны оба: SigLIP 2 и torch весят ~2 ГБ (лимит функции Vercel для Python —
-500 МБ), а пауза ассистента на подтверждение живёт в памяти процесса между двумя запросами.
-Vercel отдаёт фронтенд и проксирует /api сюда.
-
-Ключи уходят в секреты Space через API и в репозиторий Space не попадают. Скрипт
-идемпотентный: повторный запуск обновляет код и секреты.
-"""
 import io
 import secrets
 import sys
@@ -31,7 +15,7 @@ VARIABLES = {"COOKIE_SECURE": "1", "TRACING": "0", "RUN_BOT": "1", "LLM_DAILY_BU
              "GEMINI_MODEL": "gemini-3.6-flash", "GEMINI_THINKING": "minimal"}
 IGNORE = [".env", ".env.*", "var/**", "data/**", ".pytest_cache/**", "**/__pycache__/**", "*.pyc", ".DS_Store",
           "artifacts/qdrant/**", "artifacts/qdrant_server/**", "artifacts/emb_shards/**", "artifacts/photo_emb.npy",
-          "artifacts/dino_emb.npy", "notebooks/**", "review/**", "mew.ipynb", ".claude/**", "README.md"]
+          "artifacts/dino_emb.npy", "notebooks/**", "review/**", "mew.ipynb", "README.md"]
 
 SPACE_README = """---
 title: Baga — аренда в Алматы по виду ремонта
@@ -61,7 +45,7 @@ def main():
     api.create_repo(repo_id, repo_type="space", space_sdk="docker", exist_ok=True, private=False)
     print(f"Space: https://huggingface.co/spaces/{repo_id}")
 
-    if not env.get("BAGA_SECRET"):                  # стабильная подпись cookie между перезапусками
+    if not env.get("BAGA_SECRET"):
         env["BAGA_SECRET"] = secrets.token_hex(32)
         set_key(str(env_path), "BAGA_SECRET", env["BAGA_SECRET"])
     for k in SECRET_KEYS:

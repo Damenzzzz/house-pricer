@@ -1,16 +1,3 @@
-"""Adaptive (AIMD) self-tuning controller.
-
-Wraps the fetch engines, paces requests with a jittered delay, logs every
-request to ``scrape_events`` and adapts:
-
-* streak of successes  -> delay decreases gently toward the floor;
-* 429/403/468          -> delay x2, concurrency -> 1, honor Retry-After, cooldown;
-* captcha              -> STOP the run, cooldown, record; never try to solve;
-* sustained empty parse-> probable layout change, STOP with a clear error.
-
-The best stable profile {engine, delay_ms, concurrency} is persisted to
-``config/runtime_profile.json`` and loaded on the next run.
-"""
 from __future__ import annotations
 
 import json
@@ -27,19 +14,19 @@ log = get_logger("controller")
 
 
 class CaptchaStop(RuntimeError):
-    """Raised when a captcha is hit: stop the run, do not attempt to solve."""
+    pass
 
 
 class LayoutChangeStop(RuntimeError):
-    """Raised when too many pages parse empty: versta probably changed."""
+    pass
 
 
 class BlockedStop(RuntimeError):
-    """Raised when a page stays blocked after cooldown + retries."""
+    pass
 
 
 class NetworkStop(RuntimeError):
-    """Raised when the selected routes cannot complete a request after retries."""
+    pass
 
 
 @dataclass
@@ -75,7 +62,6 @@ class Controller:
         self._engines: dict[str, Fetcher] = {}
         self._jitter_seq = 0
 
-    # --- engines ----------------------------------------------------------
     def engine(self, name: str) -> Fetcher:
         if name not in self._engines:
             self._engines[name] = (
@@ -88,24 +74,16 @@ class Controller:
         for e in self._engines.values():
             e.close()
 
-    # --- pacing -----------------------------------------------------------
     def _sleep_delay(self) -> int:
-        """Deterministic jitter (+/-15%) around the current delay, then sleep."""
         self._jitter_seq += 1
-        frac = ((self._jitter_seq * 2654435761) % 1000) / 1000.0  # 0..1 deterministic
-        jitter = (frac - 0.5) * 0.30  # +/-15%
+        frac = ((self._jitter_seq * 2654435761) % 1000) / 1000.0
+        jitter = (frac - 0.5) * 0.30
         delay = int(self.delay_ms * (1 + jitter))
         delay = max(config.MIN_DELAY_MS, min(config.MAX_DELAY_MS, delay))
         time.sleep(delay / 1000.0)
         return delay
 
-    # --- main entry -------------------------------------------------------
     def fetch(self, url: str, engine: str, referer: str | None = None) -> tuple[FetchResult, int]:
-        """Fetch with pacing + block handling. Returns (result, delay_ms_used).
-
-        Raises CaptchaStop on captcha. Retries blocks with cooldown; raises
-        BlockedStop if still blocked afterwards.
-        """
         attempts = 0
         while True:
             delay_used = self._sleep_delay()
@@ -137,9 +115,7 @@ class Controller:
 
             return result, delay_used
 
-    # --- outcome reporting ------------------------------------------------
     def record(self, result: FetchResult, outcome: str, delay_ms: int) -> None:
-        """Report the final (parse-level) outcome for a fetched page."""
         self._record(result, outcome, delay_ms)
         if outcome == "ok":
             if not result.from_cache:
@@ -158,7 +134,6 @@ class Controller:
             result.latency_ms, delay_ms, self.concurrency, outcome,
         )
 
-    # --- AIMD adjustments -------------------------------------------------
     def _on_success(self) -> None:
         self._success_streak += 1
         if self._success_streak >= 3 and self.delay_ms > config.MIN_DELAY_MS:

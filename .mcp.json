@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "baga-ai": {
+    "house-pricer": {
       "command": "python",
-      "args": ["baga-ai/mcp_server.py"]
+      "args": ["house-pricer/mcp_server.py"]
     }
   }
 }

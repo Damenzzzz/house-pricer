@@ -10,7 +10,7 @@ from .logging_setup import setup_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="krisha", description="Baga AI krisha.kz rent parser")
+    p = argparse.ArgumentParser(prog="krisha", description="House Pricer krisha.kz rent parser")
     sub = p.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("crawl", help="collect listing ids from search pages")

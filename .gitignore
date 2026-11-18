@@ -16,13 +16,13 @@ KrishaParser/logs/
 *.sqlite3
 *.log
 
-baga-ai/data/
-baga-ai/var/
-baga-ai/artifacts/qdrant/
-baga-ai/artifacts/qdrant_server/
-baga-ai/artifacts/emb_shards/
-baga-ai/artifacts/photo_emb.npy
-baga-ai/artifacts/dino_emb.npy
+house-pricer/data/
+house-pricer/var/
+house-pricer/artifacts/qdrant/
+house-pricer/artifacts/qdrant_server/
+house-pricer/artifacts/emb_shards/
+house-pricer/artifacts/photo_emb.npy
+house-pricer/artifacts/dino_emb.npy
 catboost_info/
 
 __pycache__/

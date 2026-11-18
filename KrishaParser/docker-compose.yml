@@ -1,7 +1,7 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: baga-qdrant
+    container_name: house-pricer-qdrant
     ports:
       - "6333:6333"
       - "6334:6334"

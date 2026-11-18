@@ -1,4 +1,4 @@
-# Baga AI — krisha.kz Rent Parser
+# House Pricer — krisha.kz Rent Parser
 
 Scrapes **monthly apartment-rent** listings from krisha.kz (Kaskelen + Almaty),
 stores structured fields + photos in SQLite, and (Phase B) embeds photos into

@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: baga-ai
+        working-directory: house-pricer
     env:
       TRACING: "0"
       LANGFUSE_TRACING: "false"
@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: baga-ai/requirements-ci.txt
+          cache-dependency-path: house-pricer/requirements-ci.txt
       - run: pip install -r requirements-ci.txt
 
       - name: Guardrails eval
@@ -51,7 +51,7 @@ jobs:
     environment: GEMINI_API_KEY
     defaults:
       run:
-        working-directory: baga-ai
+        working-directory: house-pricer
     env:
       TRACING: "0"
       LANGFUSE_TRACING: "false"
@@ -64,7 +64,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: baga-ai/requirements-ci.txt
+          cache-dependency-path: house-pricer/requirements-ci.txt
       - name: Check secrets
         id: keys
         run: echo "ok=$([ -n "$GEMINI_API_KEY" ] && [ -n "$ALEM_API_KEY" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -89,8 +89,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: baga-ai
+          context: house-pricer
           push: false
-          tags: baga-ai:ci
+          tags: house-pricer:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

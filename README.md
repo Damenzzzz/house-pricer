@@ -1,13 +1,13 @@
-# Baga — аренда в Алматы по виду ремонта и с честной ценой
+# House Pricer — аренда в Алматы по виду ремонта и с честной ценой
 
 Мы — Исламбек Султанбек и Нурдаулет Алдибек. Это наш финальный проект курса nFactorial:
 сервис, который ищет квартиры в аренду по тому, **как они выглядят**, и говорит, **дороже ли
 квартира похожих**. Всё — от парсера krisha.kz до сайта, Telegram-бота и оценки качества —
 мы сделали вдвоём.
 
-**Попробовать:** https://baga-ai.vercel.app · Telegram-бот [@krishaa_ai_bot](https://t.me/krishaa_ai_bot)
+**Попробовать:** https://house-pricer.vercel.app · Telegram-бот [@krishaa_ai_bot](https://t.me/krishaa_ai_bot)
 
-![главная страница](baga-ai/docs/screenshots/home_hero.png)
+![главная страница](house-pricer/docs/screenshots/home_hero.png)
 
 ## Какую проблему мы решаем
 
@@ -36,18 +36,18 @@
 | Канал | Как |
 |---|---|
 | Telegram-бот | [@krishaa_ai_bot](https://t.me/krishaa_ai_bot) — текст, голосовые, ссылки на krisha.kz |
-| Сайт | **https://baga-ai.vercel.app** · или у себя: `docker compose up -d` → http://localhost:8501 |
-| Claude, Cursor | MCP-сервер: `claude mcp add baga-ai -- python baga-ai/mcp_server.py` |
+| Сайт | **https://house-pricer.vercel.app** · или у себя: `docker compose up -d` → http://localhost:8501 |
+| Claude, Cursor | MCP-сервер: `claude mcp add house-pricer -- python house-pricer/mcp_server.py` |
 
 ## Как это выглядит
 
 | Ассистент: разобрал запрос и ответил со ссылками | Человек в контуре: модель додумала город — спрашиваем |
 |---|---|
-| ![ассистент](baga-ai/docs/screenshots/app_assistant.png) | ![подтверждение](baga-ai/docs/screenshots/app_pause.png) |
+| ![ассистент](house-pricer/docs/screenshots/app_assistant.png) | ![подтверждение](house-pricer/docs/screenshots/app_pause.png) |
 | **Найденные квартиры: фото кухонь и коридор цены** | **Проверка цены по ссылке krisha.kz** |
-| ![карточки](baga-ai/docs/screenshots/app_cards.png) | ![цена](baga-ai/docs/screenshots/app_price.png) |
+| ![карточки](house-pricer/docs/screenshots/app_cards.png) | ![цена](house-pricer/docs/screenshots/app_price.png) |
 | **Панель админа: расход на модели, провайдеры, отзывы** | **Телефон** |
-| ![админка](baga-ai/docs/screenshots/admin.png) | ![телефон](baga-ai/docs/screenshots/home_mobile.png) |
+| ![админка](house-pricer/docs/screenshots/admin.png) | ![телефон](house-pricer/docs/screenshots/home_mobile.png) |
 
 ## Как это устроено
 
@@ -85,7 +85,7 @@ Telegram. Все вызовы моделей идут через наш шлюз
 фактов, с кэшем, дневным бюджетом и предохранителем.
 
 Путь одного запроса по шагам, все компоненты и почему выбраны именно они —
-[baga-ai/ARCHITECTURE.md](baga-ai/ARCHITECTURE.md).
+[house-pricer/ARCHITECTURE.md](house-pricer/ARCHITECTURE.md).
 
 ## Почему именно так
 
@@ -121,7 +121,7 @@ Telegram. Все вызовы моделей идут через наш шлюз
 
 A/B-эксперименты: ALEM против Gemini, уровень рассуждений Gemini, temperature, top_p,
 max_tokens, каналы поиска и их веса, язык запроса, порог смыслового кэша.
-Все таблицы и выводы — в [baga-ai/EVALS.md](baga-ai/EVALS.md). Живые оценки запускаются в
+Все таблицы и выводы — в [house-pricer/EVALS.md](house-pricer/EVALS.md). Живые оценки запускаются в
 CI на каждый PR: если разбор запроса станет хуже 90%, сборка падает.
 
 **Гипотезы, которые не подтвердились.** Мы дообучили текстовую часть SigLIP (LoRA) на парах
@@ -136,7 +136,7 @@ CI на каждый PR: если разбор запроса станет ху�
 Одной командой (нужен Docker):
 
 ```bash
-git clone https://github.com/Damenzzzz/Krisha_baga_predictor && cd Krisha_baga_predictor/baga-ai
+git clone https://github.com/Damenzzzz/house-pricer && cd house-pricer/house-pricer
 cp .env.example .env          # ключи Gemini, ALEM, Langfuse; без них работают поиск и вердикт по цене
 docker compose up -d          # Qdrant + загрузка индекса + сайт → http://localhost:8501
 docker compose --profile telegram up -d    # ещё и бот (нужен TELEGRAM_BOT_TOKEN)
@@ -145,7 +145,7 @@ docker compose --profile telegram up -d    # ещё и бот (нужен TELEGR
 Без Docker, Python 3.12:
 
 ```bash
-cd baga-ai && pip install -r requirements.txt
+cd house-pricer && pip install -r requirements.txt
 python qdrant_store.py ensure           # векторы в Qdrant, один раз (~1 минута)
 uvicorn server:app --port 8501          # сайт
 python telegram_bot.py                  # бот
@@ -159,9 +159,9 @@ pytest tests                            # 50 тестов, то же, что в 
 
 | Требование | Где | Чем подтверждено |
 |---|---|---|
-| LangGraph с ветвлением, циклом и человеком в контуре | `baga-ai/agent.py` | вопрос о домысленных условиях, цикл ослабления фильтров, кнопки на сайте и в Telegram |
-| Свой MCP-сервер, 2–3+ инструмента | `baga-ai/mcp_server.py` | 4 инструмента, тест через MCP-клиента в CI |
-| Свой Skill | `baga-ai/skills/rent-price-check/SKILL.md` | триггеры, «когда не использовать», скрипт |
+| LangGraph с ветвлением, циклом и человеком в контуре | `house-pricer/agent.py` | вопрос о домысленных условиях, цикл ослабления фильтров, кнопки на сайте и в Telegram |
+| Свой MCP-сервер, 2–3+ инструмента | `house-pricer/mcp_server.py` | 4 инструмента, тест через MCP-клиента в CI |
+| Свой Skill | `house-pricer/skills/rent-price-check/SKILL.md` | триггеры, «когда не использовать», скрипт |
 | RAG: chunking, эмбеддинги, векторная БД, reranker | `search.py`, `qdrant_store.py`, `rerank.py` | SigLIP 2 + ALEM text-1024, Qdrant, RRF с подобранным весом; реранкер проверен и выключен по данным |
 | Скрапинг с динамическим контентом | `KrishaParser/` | httpx для списков, Playwright для карточек, 7 485 объявлений, 72 963 фото |
 | Мультимодальность | `embed.py`, `rooms.py`, `voice.py`, `eval_visual_judge.py` | поиск текстом по фото, поиск по своему фото, тип комнаты, детектор рендеров, дубли по DINOv3, голос, визуальный судья |
@@ -169,12 +169,12 @@ pytest tests                            # 50 тестов, то же, что в 
 | Golden dataset ≥ 30, 2+ метрики | `evals.py`, `ab_models.py` | 32 запроса поиска, 36 запросов разбора; 7 метрик |
 | A/B эксперимент | `ab_models.py`, `ab_generation.py`, `evals.py` | 8 экспериментов с выводами |
 | Выбор LLM и гиперпараметров | ARCHITECTURE «Выбор моделей», EVALS 3 и 6 | цена, скорость и качество в одной таблице; temperature, top_p, max_tokens, thinking |
-| Веб-фронтенд | `baga-ai/server.py`, `baga-ai/web/` | главная с живым демо, поиск в 4 режимах, вход, панель админа |
+| Веб-фронтенд | `house-pricer/server.py`, `house-pricer/web/` | главная с живым демо, поиск в 4 режимах, вход, панель админа |
 | **Рекомендуемое** | | |
 | Guardrails | `guardrails.py` | инъекции, PII, домен на входе; сверка сумм и id на выходе |
 | Кэширование | `llm.py`, `semantic_cache.py` | точный кэш ответов и смысловой кэш разбора с порогом из эксперимента |
 | Фолбэк между моделями | `llm.py` | Gemini → ALEM → шаблон, предохранитель, дневной бюджет |
-| Docker и docker-compose | `baga-ai/Dockerfile`, `docker-compose.yml` | Qdrant + загрузка индекса + сайт + бот |
+| Docker и docker-compose | `house-pricer/Dockerfile`, `docker-compose.yml` | Qdrant + загрузка индекса + сайт + бот |
 | CI/CD с evals на каждый PR | `.github/workflows/ci.yml` | 4 задачи, порог качества роняет сборку |
 | Аутентификация и роли | `auth.py`, `server.py` | гость, пользователь, админ; лимиты по ролям |
 | Голосовой интерфейс | `voice.py` | речь → агент → речь, на сайте и в Telegram |
@@ -182,7 +182,7 @@ pytest tests                            # 50 тестов, то же, что в 
 | Свой eval-фреймворк, нестандартные метрики | `ab_models.py`, `eval_visual_judge.py` | «ловушки», «выдуманные суммы и id», «покрытие», визуальный судья |
 | Интеграция с внешним API | `telegram_bot.py` | Telegram Bot API |
 | Реальные пользователи и обратная связь | `store.py`, панель админа | 👍/👎 на сайте и в боте → SQLite и оценки в Langfuse |
-| Деплой на публичный URL | `deploy/vercel_deploy.py`, `deploy/public_up.sh` | https://baga-ai.vercel.app — фронтенд на Vercel, API проксируется на бэкенд |
+| Деплой на публичный URL | `deploy/vercel_deploy.py`, `deploy/public_up.sh` | https://house-pricer.vercel.app — фронтенд на Vercel, API проксируется на бэкенд |
 
 ## Ограничения
 
@@ -197,5 +197,5 @@ pytest tests                            # 50 тестов, то же, что в 
 | Папка | Что это |
 |---|---|
 | [`KrishaParser/`](KrishaParser) | парсер krisha.kz: списки и карточки, фото с CDN, дедуп, SQLite |
-| [`baga-ai/`](baga-ai) | продукт: поиск, модель цены, агент, шлюз LLM, MCP, сайт, бот, оценки — [подробно](baga-ai/README.md) |
+| [`house-pricer/`](house-pricer) | продукт: поиск, модель цены, агент, шлюз LLM, MCP, сайт, бот, оценки — [подробно](house-pricer/README.md) |
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI: парсер, тесты, живые оценки с порогом, сборка Docker |
